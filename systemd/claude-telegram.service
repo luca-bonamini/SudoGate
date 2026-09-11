@@ -1,0 +1,17 @@
+[Unit]
+Description=Daemon Telegram per Claude Code
+After=network-online.target
+# Senza questi limiti un config.json assente produce un riavvio ogni 5s per sempre.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart=%h/bin/claude-telegram
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

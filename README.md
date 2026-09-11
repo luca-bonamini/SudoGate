@@ -5,7 +5,7 @@ gate di approvazione per i comandi `sudo`.
 
 Design completo in [`docs/2026-09-11-telegram-gate-design.md`](docs/2026-09-11-telegram-gate-design.md).
 
-Stato: spec approvata, implementazione non iniziata.
+Stato: piano 1 implementato e testato. Manca il bootstrap del bot, che richiede il telefono — vedi `docs/consegna-piano-1.md`.
 
 ## Dove finiscono i file
 
@@ -13,13 +13,13 @@ Il repo non è la posizione di esecuzione. L'installazione copia i file qui:
 
 | dal repo | a |
 |---|---|
-| `bin/claude-telegram.py` | `~/bin/` |
-| `bin/claude-tg-notify.sh` | `~/bin/` |
-| `bin/claude-tg-gate.sh` | `~/bin/` |
-| `bin/claude-tg-mark.sh` | `~/bin/` |
-| `bin/claude-sudo` | `~/bin/` |
-| `bin/claude-sudo-run` | `/usr/local/sbin/` (root, `0755`) |
+| `ctg/` | `~/.local/lib/claude-telegram/ctg/` |
+| `bin/claude-telegram` | `~/bin/` |
+| `bin/claude-tg-hook` | `~/bin/` |
+| `bin/ctg-bootstrap` | `~/bin/` |
 | `systemd/claude-telegram.service` | `~/.config/systemd/user/` |
+
+Installazione: `./install.sh`, idempotente.
 
 Configurazione e stato stanno in `~/.claude/telegram/`, il seed TOTP in `/etc/claude-gate/seed`.
 Nessuno dei due è nel repo.
