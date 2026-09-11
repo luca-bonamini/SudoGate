@@ -994,8 +994,7 @@ class TestIPC(unittest.TestCase):
             return {"ok": True}
 
         self.start(handler)
-        with self.assertRaises(ipc.IPCError):
-            ipc.request(self.sock, {"boom": True}, timeout=5)
+        self.assertIn("error", ipc.request(self.sock, {"boom": True}, timeout=5))
         self.assertEqual(ipc.request(self.sock, {}, timeout=5), {"ok": True})
 
     def test_timeout_del_client(self):
@@ -1651,7 +1650,7 @@ import sys
 
 REPO_LIB = pathlib.Path("/home/luca/.local/lib/claude-telegram")
 if REPO_LIB.is_dir():
-    sys.path.insert(0, str(REPO_LIB))
+    sys.path.append(str(REPO_LIB))
 
 IPC_TIMEOUT_SECONDS = 1.5
 
@@ -1691,7 +1690,7 @@ import sys
 
 REPO_LIB = pathlib.Path("/home/luca/.local/lib/claude-telegram")
 if REPO_LIB.is_dir():
-    sys.path.insert(0, str(REPO_LIB))
+    sys.path.append(str(REPO_LIB))
 
 from ctg import daemon  # noqa: E402
 
@@ -1699,7 +1698,9 @@ if __name__ == "__main__":
     sys.exit(daemon.main(sys.argv[1:]))
 ```
 
-L'import di `ctg` sta dentro `main` in `claude-tg-hook`: se il package è assente o rotto, l'hook esce comunque `0` invece di sollevare all'avvio. `PYTHONPATH` impostato dai test ha la precedenza su `REPO_LIB`, che nei test non esiste.
+L'import di `ctg` sta dentro `main` in `claude-tg-hook`: se il package è assente o rotto, l'hook esce comunque `0` invece di sollevare all'avvio.
+
+`REPO_LIB` va in coda a `sys.path`, non in testa. In testa prenderebbe il sopravvento sulla copia installata anche quando si esegue dal repo, e dopo il Task 11 i test girerebbero contro il codice installato invece che contro i sorgenti.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1846,7 +1847,7 @@ import time
 
 REPO_LIB = pathlib.Path("/home/luca/.local/lib/claude-telegram")
 if REPO_LIB.is_dir():
-    sys.path.insert(0, str(REPO_LIB))
+    sys.path.append(str(REPO_LIB))
 
 from ctg import bootstrap, config, telegram  # noqa: E402
 
@@ -1918,13 +1919,15 @@ git commit -m "feat: bootstrap interattivo per token e chat_id"
 [Unit]
 Description=Daemon Telegram per Claude Code
 After=network-online.target
+# Senza questi limiti un config.json assente produce un riavvio ogni 5s per sempre.
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
 ExecStart=%h/bin/claude-telegram
 Restart=on-failure
 RestartSec=5
-# Il daemon legge config.json e scrive stato solo sotto ~/.claude/telegram.
 NoNewPrivileges=true
 PrivateTmp=true
 
