@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+"""Cattura il chat_id: chiede il token, attende un messaggio al bot, scrive config.json."""
+import getpass
+import pathlib
+import sys
+import time
+
+REPO_LIB = pathlib.Path("/home/luca/.local/lib/claude-telegram")
+if REPO_LIB.is_dir():
+    sys.path.append(str(REPO_LIB))
+
+from ctg import bootstrap, config, telegram  # noqa: E402
+
+ATTEMPTS = 20
+
+
+def main():
+    token = getpass.getpass("Token del bot (non viene mostrato): ").strip()
+    if not token:
+        print("token vuoto, interrotto")
+        return 1
+    client = telegram.Client(token)
+    print("Manda /start al bot da Telegram. Attendo.")
+    for _ in range(ATTEMPTS):
+        try:
+            updates = client.get_updates(offset=0, timeout=15)
+        except telegram.TelegramError as exc:
+            print(f"errore: {exc}")
+            return 1
+        chat_id = bootstrap.first_chat_id(updates)
+        if chat_id is not None:
+            path = config.config_path()
+            bootstrap.write_config(path, token, chat_id)
+            print(f"chat_id {chat_id} scritto in {path}")
+            return 0
+        time.sleep(1)
+    print("nessun messaggio ricevuto, riprova")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
