@@ -34,10 +34,23 @@ if [ ! -f "$seed_tmp" ]; then
 fi
 install -m 0400 -o root -g root "$seed_tmp" /etc/sudogate/seed
 
-# 4. audit log
+# 4. optional policy: require a TOTP code for every command, not only
+#    destructive ones. Root-owned, so the user cannot clear it.
+if [ "${SUDOGATE_TOTP_ALWAYS:-0}" = "1" ]; then
+  : > /etc/sudogate/totp_always
+  chmod 0444 /etc/sudogate/totp_always
+  chown root:root /etc/sudogate/totp_always
+  echo "Policy: a TOTP code is required for EVERY command."
+else
+  rm -f /etc/sudogate/totp_always
+  echo "Policy: a TOTP code is required for destructive commands only."
+  echo "  To require it for every command, re-run with SUDOGATE_TOTP_ALWAYS=1"
+fi
+
+# 5. audit log
 install -d -m 0755 -o root -g root /var/log/sudogate
 
-# 5. sudoers rule, validated before install
+# 6. sudoers rule, validated before install
 tmp_sudoers="$(mktemp)"
 sed "s/__USER__/$target_user/g" "$repo/config/sudogate.sudoers.template" > "$tmp_sudoers"
 if ! visudo -c -f "$tmp_sudoers"; then

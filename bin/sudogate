@@ -25,10 +25,11 @@ def _add_package_to_path():
 
 _add_package_to_path()
 
-from sudogate import cache, config, gate, sessions, state  # noqa: E402
+from sudogate import cache, config, gate, sessions, state, wrapper  # noqa: E402
 from sudogate import ipc  # noqa: E402
 
 WRAPPER = "/usr/local/sbin/sudogate-run"
+ALWAYS_PATH = os.environ.get("SUDOGATE_TOTP_ALWAYS", "/etc/sudogate/totp_always")
 
 
 def main(argv):
@@ -45,7 +46,10 @@ def main(argv):
     home = config.home()
     cwd = os.getcwd()
     now = time.time()
-    destructive = gate.is_destructive(command, cfg["destructive_patterns"])
+    # The root-owned policy wins over the user config: a flag the user could
+    # clear would not be a policy. The user file only adds, never removes.
+    always = wrapper.load_totp_always(ALWAYS_PATH) or bool(cfg.get("totp_always"))
+    destructive = always or gate.is_destructive(command, cfg["destructive_patterns"])
     cache_path = home / "cache.json"
     label = sessions.label_for_cwd(cwd, sessions.tmux_sessions())
 

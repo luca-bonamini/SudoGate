@@ -46,6 +46,7 @@ STATE_HOME = pathlib.Path(
 )
 PATTERNS_PATH = os.environ.get("SUDOGATE_PATTERNS", "/etc/sudogate/destructive.patterns")
 SEED_PATH = os.environ.get("SUDOGATE_SEED", "/etc/sudogate/seed")
+ALWAYS_PATH = os.environ.get("SUDOGATE_TOTP_ALWAYS", "/etc/sudogate/totp_always")
 AUDIT_PATH = pathlib.Path(os.environ.get("SUDOGATE_AUDIT", "/var/log/sudogate/audit.log"))
 CLAIM_TTL = 300
 
@@ -77,7 +78,8 @@ def main(argv):
     command = record["command"]
     patterns = wrapper.load_patterns(PATTERNS_PATH)
     seed = wrapper.load_seed(SEED_PATH)
-    ok, reason = wrapper.authorize(command, patterns, seed, totp_code, now)
+    always = wrapper.load_totp_always(ALWAYS_PATH)
+    ok, reason = wrapper.authorize(command, patterns, seed, totp_code, now, always)
     if not ok:
         _audit(f"DENY cmd={command!r} reason={reason}")
         print(reason, file=sys.stderr)

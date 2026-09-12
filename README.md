@@ -27,9 +27,14 @@ Be concrete about what each half protects:
 | Someone who can already run code as your user | **no** for non-destructive commands; yes for destructive ones — the TOTP seed is `0400 root` and your user cannot read it |
 | An obfuscated destructive command that evades the pattern list | **no** — pattern matching is best-effort defence in depth, not a proof |
 
-So: for non-destructive commands, your user account becomes effectively equivalent to root,
-gated by one tap. That is the deal. The TOTP factor is real, verified root-side, and covers the
-destructive list only. Set `totp_always` to extend it to every command.
+So in the default configuration, for non-destructive commands your user account becomes
+effectively equivalent to root, gated by one tap. That is the deal. The TOTP factor is real,
+verified root-side, and by default covers the destructive list only.
+
+**If you are picking up your phone anyway, require the code for everything.** Install with
+`SUDOGATE_TOTP_ALWAYS=1`, and the two rows above that say *no* become *yes*: no path from your
+user, or from a stolen Telegram account, reaches root without your authenticator. The button
+stops being the weak half. It costs the same gesture you were already making.
 
 Install this only if that trade is worth it to you. If your goal is to *increase* the security
 of a machine, this is the wrong tool.
@@ -152,11 +157,20 @@ access entirely, remove `/etc/sudoers.d/sudogate`.
 | `chat_id` | — | the only chat allowed to approve |
 | `approval_ttl_seconds` | 120 | how long an approval request stays open |
 | `cache_ttl_seconds` | 28800 | how long an approved non-destructive command is remembered |
-| `totp_always` | `false` | require TOTP for every command, not just destructive ones |
-| `destructive_patterns` | see `sudogate/config.py` | user-side list, used only for the prompt |
+| `totp_always` | `false` | ask for a code on every command — a convenience mirror of the policy below, it can only add friction, never remove it |
+| `destructive_patterns` | see `sudogate/config.py` | user-side list, used only to decide what the bot asks for |
 
-The list that actually enforces is `/etc/sudogate/destructive.patterns`, root-owned. Editing the
-user-side list changes what the bot asks for, never what the wrapper permits.
+Everything under `~/.config` is writable by your user, so none of it can enforce anything. What
+enforces lives in `/etc/sudogate`, owned by root:
+
+| path | mode | meaning |
+|---|---|---|
+| `destructive.patterns` | `0444` | the list the wrapper actually classifies against |
+| `seed` | `0400` | the TOTP secret; your user cannot read it |
+| `totp_always` | `0444` | if this file exists, every command needs a code |
+
+Editing the user-side list changes what the bot asks for, never what the wrapper permits. To
+change the policy, re-run the root installer with `SUDOGATE_TOTP_ALWAYS=1` (or `0` to go back).
 
 ## Security notes
 

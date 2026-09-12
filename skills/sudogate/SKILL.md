@@ -40,6 +40,11 @@ Two halves. The user runs the root half themselves; it needs their password.
    `visudo -c`, and that second session is the way back in.
 6. `shred -u /tmp/sudogate-seed`, then `systemctl --user enable --now sudogate`.
 
+**Ask about the policy at step 5.** If the user is going to reach for their authenticator
+anyway, requiring a code for every command costs them nothing extra and closes the two gaps
+the default leaves open: a compromised Telegram account, and code running as their user.
+Install with `SUDOGATE_TOTP_ALWAYS=1` to enable it. Re-run with `0` to go back.
+
 Then verify with the checks under Diagnose.
 
 ## Diagnose
@@ -67,6 +72,13 @@ Common failures:
 - **A command ran without asking for TOTP and you expected one.** It did not match
   `/etc/sudogate/destructive.patterns`. That file is root-owned on purpose; adding a pattern
   needs root.
+
+## Change the policy
+
+Enforcement lives in `/etc/sudogate/totp_always`, root-owned `0444`. Present means every
+command needs a code; absent means only destructive ones do. Re-run the root installer with
+`SUDOGATE_TOTP_ALWAYS=1` or `0`. The `totp_always` key in the user config only mirrors it for
+the prompt: it can add friction, never remove it.
 
 ## Rotate the TOTP seed
 
