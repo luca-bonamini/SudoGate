@@ -1,132 +1,120 @@
-# sudogate
+# SudoGate
 
-Approve Claude Code's privileged commands from Telegram, with a TOTP second factor on
-destructive ones that only root can verify.
+**Let Claude Code run privileged commands — but only when you say so, from your phone.**
 
-Claude cannot escalate privileges directly: a `PreToolUse` hook denies it and points at the
-`sudogate` shim. The shim asks a dedicated Telegram bot for approval. You tap a button. For
-commands matching a root-owned pattern list, the bot also asks for a 6-digit code, and a
-root-owned wrapper verifies it against a seed your user account cannot read.
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
+![Tests](https://img.shields.io/badge/tests-119%20passing-brightgreen)
+![Dependencies](https://img.shields.io/badge/dependencies-none-lightgrey)
 
----
+Claude asks. Your phone buzzes. You tap. It runs.
 
-## Read this before installing
+For anything destructive, a tap is not enough: you also send a 6-digit code from your
+authenticator, and a root-owned wrapper checks it against a seed your own account cannot read.
 
-**sudogate raises the privilege available to Claude. It does not lower it.**
+```
+Claude ▸  sudogate systemctl restart nginx
 
-Before: the password prompt means Claude cannot run privileged commands at all.
-After: Claude can run any command as root, provided you tap Approve on your phone.
+   📱  [webapp] privileged command
+       systemctl restart nginx
+       [ Approve ]  [ Deny ]
 
-Be concrete about what each half protects:
+Claude ▸  done — nginx restarted
+```
 
-| threat | covered? |
-|---|---|
-| Claude acting unsupervised, or an automation mistake | yes — nothing runs without your tap |
-| You being away from the terminal and missing a prompt | yes — the approval reaches your phone |
-| Someone who controls your Telegram account | **no** for non-destructive commands; yes for destructive ones, which also need the authenticator |
-| Someone who can already run code as your user | **no** for non-destructive commands; yes for destructive ones — the TOTP seed is `0400 root` and your user cannot read it |
-| An obfuscated destructive command that evades the pattern list | **no** — pattern matching is best-effort defence in depth, not a proof |
-
-So in the default configuration, for non-destructive commands your user account becomes
-effectively equivalent to root, gated by one tap. That is the deal. The TOTP factor is real,
-verified root-side, and by default covers the destructive list only.
-
-**If you are picking up your phone anyway, require the code for everything.** Install with
-`SUDOGATE_TOTP_ALWAYS=1`, and the two rows above that say *no* become *yes*: no path from your
-user, or from a stolen Telegram account, reaches root without your authenticator. The button
-stops being the weak half. It costs the same gesture you were already making.
-
-Install this only if that trade is worth it to you. If your goal is to *increase* the security
-of a machine, this is the wrong tool.
+Leave your terminal. Leave the house. Your agent keeps working, and nothing touches root without
+you.
 
 ---
+
+## Why
+
+Agents are useful right up to the moment they need `sudo`. Then you either stand guard at the
+terminal, or you hand over a passwordless blank cheque and hope.
+
+SudoGate is the third option: the agent proposes, you dispose — from wherever you are.
+
+- **One tap.** No SSH, no terminal, no password typed on a phone keyboard.
+- **A real second factor.** Destructive commands need TOTP, verified by root. Not a checkbox:
+  your user account cannot read the seed, so it cannot forge the code.
+- **You see what you approve.** The message is composed from the recorded command, not from
+  anything the agent says.
+- **Nothing to install but Python.** Standard library only. No pip, no venv, no daemon zoo.
+- **Fails closed.** Daemon down, gate shut.
 
 ## How it works
 
-1. Claude runs `sudogate apt update` — the plain privileged form is denied by the hook.
-2. The shim writes the command to a nonce-keyed state file and asks the daemon.
-3. The daemon sends you a Telegram message with Approve / Deny.
-4. On approve, the shim calls the root wrapper with the nonce.
-5. The wrapper reads the command by nonce, **re-classifies** it against
-   `/etc/sudogate/destructive.patterns` (`0444 root`), and if destructive requires a TOTP code
-   checked against `/etc/sudogate/seed` (`0400 root`). Then it runs the command and appends to
-   `/var/log/sudogate/audit.log`.
+```
+  sudogate <cmd>          the hook denies plain escalation and points here
+        │
+        ▼
+  shim ──▶ state file (nonce)      the command is recorded before you are asked
+        │
+        ▼
+  daemon ──▶ Telegram              Approve / Deny  ·  6 digits when destructive
+        │
+        ▼
+  wrapper (root)                   re-classifies · verifies TOTP · runs · audits
+```
 
-The wrapper trusts neither the destructive flag nor the pattern list on the user side, because
-both are writable by your user. That re-classification is what makes the second factor hold
-against code running as you.
+The wrapper never takes a command on its command line. It reads the one recorded for the nonce,
+classifies it again using a root-owned pattern list, and only then runs it. Telegram carries a
+vote and, when required, a code — never the command.
 
-Non-destructive commands approved once are cached for 8 hours, keyed on
-`sha256(cwd + command)`, exact match only. Destructive commands are never cached.
-
-The command never travels through Telegram, and the 64-byte callback payload carries only a
-nonce. Telegram carries a vote and, when required, a code.
-
-## Requirements
-
-- Linux with systemd user units, Python 3.11+ (standard library only — no pip, no venv)
-- `qrencode` for the TOTP QR (optional; otherwise the script prints an `otpauth://` URI)
-- A Telegram account
+Approved non-destructive commands are remembered for 8 hours, keyed on `sha256(cwd + command)`,
+exact match only. Destructive ones are never cached.
 
 ## Install
 
-### 1. Telegram bot
+Two halves: one as you, one as root.
 
-Create a bot with [@BotFather](https://t.me/BotFather) (`/newbot`) and **send it a message**. A
-bot cannot write to a user who has not written to it first.
-
-Use a bot dedicated to sudogate. Telegram's `getUpdates` allows a single reader per bot, so
-sharing one with another tool will make both miss messages.
-
-### 2. User half
-
-```
+```bash
 git clone https://github.com/luca-bonamini/SudoGate
 cd SudoGate
-./install.sh
-~/bin/sudogate-bootstrap     # bot token (hidden) + chat id
-~/bin/sudogate-seed          # scan the QR with your authenticator
+./setup.sh
 ```
 
-### 3. Root half
+`setup.sh` walks you through the bot, the config, and the TOTP QR. Then, with root rights:
 
-A malformed file in `/etc/sudoers.d/` can break privilege escalation for the whole machine, and
-recovery means booting to a recovery shell.
-
-**Open a second SSH session, confirm elevation works there, and leave it open.** The installer
-validates with `visudo -c` before installing, but that session is your way back in.
-
-Then, with elevated rights:
-
-```
-./install-root.sh
+```bash
+./install-root.sh          # add SUDOGATE_TOTP_ALWAYS=1 to require a code for everything
 ```
 
-It installs the wrapper, `/etc/sudogate/{seed,destructive.patterns}`, the audit log directory,
-and a sudoers rule scoped to the wrapper alone — never to a shell, never to `ALL`.
+> **Before you run that:** this grants passwordless root to a wrapper your agent can call. In
+> the default setup a single tap is enough for anything not on the destructive list. Read
+> [Security](#security) first — it is short, and it is the part that decides whether this tool
+> belongs on your machine.
 
-### 4. Finish
+Finally:
 
-```
+```bash
 shred -u /tmp/sudogate-seed
 systemctl --user enable --now sudogate
 ```
 
-### 5. Register with Claude Code
+### Telegram bot
 
-As a plugin:
+Create one with [@BotFather](https://t.me/BotFather) (`/newbot`) and send it a message — a bot
+cannot write to you first. Give SudoGate a bot of its own: `getUpdates` allows one reader per
+bot.
+
+### Register with Claude Code
 
 ```
 /plugin marketplace add luca-bonamini/SudoGate
 /plugin install sudogate@sudogate
 ```
 
-Then add the allowlist entry to `~/.claude/settings.json`, so the shim itself does not trigger a
-second prompt on top of the Telegram one:
+Then, so the shim itself does not prompt on top of the Telegram approval:
 
 ```json
 "permissions": { "allow": ["Bash(sudogate:*)"] }
 ```
+
+## Requirements
+
+Linux with systemd user units · Python 3.11+ · a Telegram account · `qrencode` (optional, for
+the QR)
 
 ## Verify
 
@@ -140,12 +128,10 @@ second prompt on top of the Telegram one:
 
 ## Kill switch
 
+```bash
+systemctl --user stop sudogate      # gate shut: the shim denies everything
+rm /etc/sudoers.d/sudogate          # as root: revokes root access entirely
 ```
-systemctl --user stop sudogate
-```
-
-The gate fails closed: with no daemon, the shim denies everything. To revoke Claude's root
-access entirely, remove `/etc/sudoers.d/sudogate`.
 
 ## Configuration
 
@@ -155,52 +141,75 @@ access entirely, remove `/etc/sudoers.d/sudogate`.
 |---|---|---|
 | `bot_token` | — | required |
 | `chat_id` | — | the only chat allowed to approve |
-| `approval_ttl_seconds` | 120 | how long an approval request stays open |
+| `approval_ttl_seconds` | 120 | how long a request stays open |
 | `cache_ttl_seconds` | 28800 | how long an approved non-destructive command is remembered |
-| `totp_always` | `false` | ask for a code on every command — a convenience mirror of the policy below, it can only add friction, never remove it |
-| `destructive_patterns` | see `sudogate/config.py` | user-side list, used only to decide what the bot asks for |
+| `totp_always` | `false` | ask for a code every time — mirrors the policy below; can add friction, never remove it |
+| `destructive_patterns` | see `sudogate/config.py` | decides what the bot asks for |
 
-Everything under `~/.config` is writable by your user, so none of it can enforce anything. What
+Anything under `~/.config` is writable by your user, so none of it enforces anything. What
 enforces lives in `/etc/sudogate`, owned by root:
 
 | path | mode | meaning |
 |---|---|---|
-| `destructive.patterns` | `0444` | the list the wrapper actually classifies against |
+| `destructive.patterns` | `0444` | the list the wrapper classifies against |
 | `seed` | `0400` | the TOTP secret; your user cannot read it |
-| `totp_always` | `0444` | if this file exists, every command needs a code |
+| `totp_always` | `0444` | if present, every command needs a code |
 
-Editing the user-side list changes what the bot asks for, never what the wrapper permits. To
-change the policy, re-run the root installer with `SUDOGATE_TOTP_ALWAYS=1` (or `0` to go back).
+Change the policy by re-running the root installer with `SUDOGATE_TOTP_ALWAYS=1` (or `0`).
 
-## Security notes
+## Security
 
-- The bot token is stored `0600`; error messages never include it, and exception chains are
-  suppressed so the token cannot leak through a traceback.
-- Nonces are single-use with a 120-second TTL, and are validated as filenames to rule out path
-  traversal.
-- Any Telegram update from a chat other than the configured one is discarded.
-- The audit log is root-owned, so your user cannot erase evidence of what ran.
-- The `PreToolUse` hook strips heredoc bodies before matching, so writing a document that
-  *mentions* privileged commands is not mistaken for running one.
+Worth three minutes before you install.
 
-Found a hole? Open an issue. Please do not include a working exploit in a public report.
+**SudoGate raises the privilege available to your agent. It does not lower it.** Before: the
+password prompt stops Claude from running privileged commands at all. After: Claude can run
+anything as root, provided you approve.
 
-## Known limitations
+| threat | covered? |
+|---|---|
+| the agent acting unsupervised, or an automation mistake | yes — nothing runs without your approval |
+| you being away and missing a terminal prompt | yes — the request reaches your phone |
+| someone controlling your Telegram account | **no** by default for non-destructive commands; yes with `SUDOGATE_TOTP_ALWAYS=1` |
+| someone already running code as your user | **no** by default for non-destructive commands; yes with `SUDOGATE_TOTP_ALWAYS=1` — the seed is `0400 root` |
+| an obfuscated destructive command that dodges the pattern list | **no** — matching is defence in depth, not proof |
 
-- Pattern matching is heuristic. A determined obfuscation of a destructive command can evade the
-  list and get through with a button tap alone.
-- Single user per installation: the sudoers rule names one account.
-- Linux only. There is no macOS path.
+So in the default configuration, for non-destructive commands your user account is effectively
+equivalent to root, gated by one tap. That is the trade.
+
+**If you are reaching for your authenticator anyway, require the code for everything.** Install
+with `SUDOGATE_TOTP_ALWAYS=1` and the two *no* rows become *yes*: no path from your user, or from
+a stolen Telegram account, reaches root without the app in your hand. Same gesture, no weak half.
+
+If your goal is to *increase* the security of a machine, this is the wrong tool. It buys
+supervision, not hardening.
+
+### Implementation notes
+
+- The token is stored `0600`; errors never include it, and exception chains are suppressed so it
+  cannot surface in a traceback.
+- Nonces are single-use, 120-second TTL, validated as filenames to rule out path traversal.
+- Updates from any chat other than the configured one are dropped.
+- The audit log is root-owned: your user cannot erase what ran.
+- The hook strips heredoc bodies before matching, so writing a document that *mentions*
+  privileged commands is not mistaken for running one.
+
+Found a hole? Open an issue — without a working exploit in the public report, please.
+
+## Limitations
+
+- Pattern matching is heuristic; a determined obfuscation can slip past the list.
+- One user per installation: the sudoers rule names a single account.
+- Linux only.
 
 ## Development
 
-```
+```bash
 python3 -m unittest discover -s tests
 ```
 
-112 tests, standard library only. The TOTP implementation is checked against the RFC 6238 test
-vectors, and the enforcement path is tested as a subprocess: a destructive command with a wrong
-code must be denied and must not run.
+119 tests, standard library only. TOTP is checked against the RFC 6238 vectors, and the
+enforcement path runs as a subprocess: a destructive command with a wrong code must be denied
+and must not run.
 
 ## License
 
