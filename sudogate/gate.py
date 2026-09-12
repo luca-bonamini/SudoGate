@@ -2,9 +2,21 @@
 
 contains_sudo spots privilege escalation in command position, ignoring the
 sudogate shim itself and the word used as an argument. is_destructive decides
-whether a command needs the TOTP second factor.
+whether a command needs the TOTP second factor. compose_command turns the
+shim's argv back into the command that will be recorded and run.
 """
 import re
+import shlex
+
+
+def compose_command(argv):
+    """Join argv into a shell command, preserving quoting.
+
+    A plain " ".join drops the quotes, so `sudogate bash -c 'a; b'` would be
+    recorded as `bash -c a; b`: the wrapper shell would then run the tail as
+    a separate command, and what runs would not be what was approved.
+    """
+    return shlex.join(argv).strip()
 
 # Escalation at the start of the command or after a shell separator, but not
 # the sudogate shim (preceded by "-") nor the bare word used as an argument.

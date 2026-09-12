@@ -65,6 +65,38 @@ class TestFindSudo(unittest.TestCase):
         self.assertTrue(gate.contains_sudo("cd /tmp\nsudo apt update"))
 
 
+class TestComposeCommand(unittest.TestCase):
+    """What gets recorded must be what gets run.
+
+    A plain " ".join drops quoting: the tail of a quoted script would leak
+    out and run as a separate command in the wrapper shell.
+    """
+
+    def test_simple_argv(self):
+        self.assertEqual(gate.compose_command(["apt", "update"]), "apt update")
+
+    def test_quoted_script_survives(self):
+        self.assertEqual(gate.compose_command(["bash", "-c", "a; b"]), "bash -c 'a; b'")
+
+    def test_argument_with_spaces(self):
+        self.assertEqual(
+            gate.compose_command(["touch", "/tmp/two words.txt"]),
+            "touch '/tmp/two words.txt'",
+        )
+
+    def test_no_split_on_semicolon_inside_an_argument(self):
+        composed = gate.compose_command(["bash", "-c", "rm -rf /tmp/x; reboot"])
+        # the tail stays inside the quoted argument, it does not become its own command
+        self.assertTrue(composed.endswith("'rm -rf /tmp/x; reboot'"))
+
+    def test_empty_argv(self):
+        self.assertEqual(gate.compose_command([]), "")
+
+    def test_destructive_still_detected_through_quoting(self):
+        composed = gate.compose_command(["bash", "-c", "rm -rf /tmp/x"])
+        self.assertTrue(gate.is_destructive(composed, PATTERNS))
+
+
 class TestHeredoc(unittest.TestCase):
     """The hook payload carries the whole command, heredocs included.
 

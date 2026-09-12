@@ -33,7 +33,7 @@ ALWAYS_PATH = os.environ.get("SUDOGATE_TOTP_ALWAYS", "/etc/sudogate/totp_always"
 
 
 def main(argv):
-    command = " ".join(argv).strip()
+    command = gate.compose_command(argv)
     if not command:
         print("usage: sudogate <command>", file=sys.stderr)
         return 2
