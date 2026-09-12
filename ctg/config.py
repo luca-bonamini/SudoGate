@@ -10,7 +10,7 @@ DEFAULTS = {
     "cache_ttl_seconds": 28800,
     "totp_always": False,
     "destructive_patterns": [
-        r"\brm\s+(-\w+\s+)*-\w*r\w*f",
+        r"\brm\s+(-\w+\s+)*-\w*(r\w*f|f\w*r)",
         r"\bdd\b",
         r"\bmkfs\b",
         r"\b(fdisk|parted)\b",
