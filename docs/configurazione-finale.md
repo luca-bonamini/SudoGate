@@ -1,5 +1,8 @@
 # Configurazione finale
 
+**Eseguita il 12 settembre 2026. Il sistema è operativo.** Questo documento resta come
+procedura di riferimento per una reinstallazione. Esito e verifiche in fondo.
+
 Tutto il codice è scritto e testato (`python3 -m unittest discover -s tests`). Questa è
 l'unica parte interattiva: due bot Telegram, un QR TOTP, una riga sudoers. Richiede il telefono
 e, per la parte root, `sudo`.
@@ -28,11 +31,17 @@ nega tutto).
 
 1. Su BotFather: `/newbot`, ottieni il token del bot #1.
 2. Prendi il tuo `chat_id` da @userinfobot.
-3. Wizard:
+3. Il wizard `ccgram setup` è interattivo. In alternativa, scrivere a mano `~/.ccgram/.env`
+   (0600) con `TELEGRAM_ENABLED=true`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, e fondere in
+   `~/.claude/settings.json` il JSON stampato da `ccgram hooks`.
+
+   **ccgram carica `.env` da `PROJECT_ROOT`, cioè la directory del pacchetto npm, non da
+   `~/.ccgram`.** Serve il symlink, altrimenti il bot esce con
+   `TELEGRAM_BOT_TOKEN not configured in .env`:
    ```
-   ! ~/.npm-global/bin/ccgram setup
+   ln -sfn ~/.ccgram/.env ~/.npm-global/lib/node_modules/@jsayubi/ccgram/.env
    ```
-   Scrive `~/.ccgram/.env` e fonde i suoi hook in `~/.claude/settings.json`.
+   Tenere il file vero in `~/.ccgram/.env` lo fa sopravvivere agli aggiornamenti npm.
 4. ccgram come unit `--user` (il suo `ccgram.service` upstream è system-level con sudo, non lo
    usiamo). Percorso del pacchetto installato:
    ```
@@ -152,3 +161,21 @@ In una sessione Claude nuova:
 - Rimozione hook: togliere il blocco `PreToolUse`/`claude-tg-gate` da `settings.json`.
 - Rimozione totale root: `sudo rm /etc/sudoers.d/claude-gate /usr/local/sbin/claude-sudo-run`,
   `sudo rm -rf /etc/claude-gate /var/log/claude-gate`.
+
+
+## Esito del 12 settembre 2026
+
+| verifica | esito |
+|---|---|
+| `visudo -c` | `parsed OK` |
+| permessi | `seed` `0400 root`, `destructive.patterns` `0444`, sudoers `0440` |
+| `sudo -n /usr/local/sbin/claude-sudo-run` | usage senza password: NOPASSWD attivo |
+| `sudo` diretto da Claude | negato dall'hook, anche verso il wrapper |
+| `claude-sudo id -un` | `root` dopo un tap sul bot #2 |
+| stessa esecuzione ripetuta | servita dalla cache in 0,135 s, nessun tap |
+| `claude-sudo rm -rf ...` con TOTP valido | eseguito |
+| stesso comando con codice `000000` | `TOTP non valido o scaduto`, exit 1, **non eseguito** |
+| `cat /etc/claude-gate/seed` come `luca` | `Permission denied` |
+| `/var/log/claude-gate/audit.log` | righe `RUN` e `DENY`, incluse le corse da cache |
+
+Il `chat_id` è lo stesso per i due bot: è l'id utente Telegram, non dipende dal bot.
