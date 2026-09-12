@@ -76,7 +76,7 @@ sharing one with another tool will make both miss messages.
 ### 2. User half
 
 ```
-git clone https://github.com/luca-bonamini/sudogate
+git clone https://github.com/luca-bonamini/SudoGate
 cd sudogate
 ./install.sh
 ~/bin/sudogate-bootstrap     # bot token (hidden) + chat id
@@ -112,7 +112,7 @@ systemctl --user enable --now sudogate
 As a plugin:
 
 ```
-/plugin marketplace add luca-bonamini/sudogate
+/plugin marketplace add luca-bonamini/SudoGate
 /plugin install sudogate@sudogate
 ```
 

@@ -7,8 +7,8 @@
     "name": "Luca Bonamini",
     "url": "https://github.com/luca-bonamini"
   },
-  "repository": "https://github.com/luca-bonamini/sudogate",
-  "homepage": "https://github.com/luca-bonamini/sudogate#readme",
+  "repository": "https://github.com/luca-bonamini/SudoGate",
+  "homepage": "https://github.com/luca-bonamini/SudoGate#readme",
   "license": "MIT",
   "keywords": ["sudo", "telegram", "approval", "totp", "2fa", "security", "hooks"]
 }
