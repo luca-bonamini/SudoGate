@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
-![Tests](https://img.shields.io/badge/tests-119%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-125%20passing-brightgreen)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-lightgrey)
 
 Claude asks. Your phone buzzes. You tap. It runs.
@@ -207,7 +207,7 @@ Found a hole? Open an issue — without a working exploit in the public report, 
 python3 -m unittest discover -s tests
 ```
 
-119 tests, standard library only. TOTP is checked against the RFC 6238 vectors, and the
+125 tests, standard library only. TOTP is checked against the RFC 6238 vectors, and the
 enforcement path runs as a subprocess: a destructive command with a wrong code must be denied
 and must not run.
 
