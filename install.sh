@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# install-gate.sh — parte utente (luca). Copia lib, shim, daemon, hook e unit.
-# La parte root (wrapper, /etc/sudogate, sudoers) sta in install-gate-root.sh.
+# install.sh - user half. Copies the library, shim, daemon, hook and unit.
+# The root half (wrapper, /etc/sudogate, sudoers rule) lives in install-root.sh.
 set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,5 +23,5 @@ done
 install -m 0644 "$repo/systemd/sudogate.service" "$unitdir/sudogate.service"
 systemctl --user daemon-reload
 
-echo "Parte utente installata."
-echo "Manca la parte root:  sudo $repo/install-gate-root.sh"
+echo "User half installed."
+echo "Still missing, run with root rights:  $repo/install-root.sh"

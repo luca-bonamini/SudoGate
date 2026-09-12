@@ -1,9 +1,10 @@
-"""Logica del wrapper root (/usr/local/sbin/sudogate-run).
+"""Logic of the root wrapper (/usr/local/sbin/sudogate-run).
 
-Non si fida ne del flag destructive dello state file ne dei pattern lato
-luca: ri-classifica il comando con i pattern root-only e, se distruttivo,
-pretende un TOTP valido verificato contro il seed root-only. Cosi anche
-codice che gira come luca non aggira il secondo fattore sui distruttivi.
+It trusts neither the destructive flag in the state file nor the pattern list
+on the user side: it re-classifies the command with the root-owned patterns
+and, if destructive, requires a valid TOTP checked against the root-owned
+seed. That is what keeps the second factor standing against code running as
+the user.
 """
 import pathlib
 
@@ -30,7 +31,7 @@ def load_seed(path):
 def authorize(command, patterns, seed, totp_code, now):
     if gate.is_destructive(command, patterns):
         if not seed:
-            return False, "seed TOTP assente, comando distruttivo negato"
+            return False, "TOTP seed missing, destructive command denied"
         if not totp.verify(seed, totp_code or "", at_time=now):
-            return False, "TOTP non valido o scaduto"
-    return True, "autorizzato"
+            return False, "TOTP code invalid or expired"
+    return True, "authorized"

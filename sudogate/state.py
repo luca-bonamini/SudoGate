@@ -1,8 +1,8 @@
-"""Store dei comandi sudo in attesa di approvazione, uno per nonce.
+"""Store of privileged commands awaiting approval, one per nonce.
 
-Scritto dallo shim (che gira come luca), letto dal daemon per mostrare
-il comando nel messaggio, e dal wrapper (root) che lo esegue. Il nonce e
-un nome di file: viene validato per escludere path traversal.
+Written by the shim as the calling user, read by the daemon to show the
+command in the approval message, and by the root wrapper that runs it. The
+nonce becomes a file name, so it is validated to rule out path traversal.
 """
 import json
 import os

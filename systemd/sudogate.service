@@ -1,5 +1,5 @@
 [Unit]
-Description=Gate sudo Telegram per Claude Code (bot dedicato, approvazione + TOTP)
+Description=sudogate - Telegram approval gate for privileged commands
 After=network-online.target
 StartLimitIntervalSec=300
 StartLimitBurst=5

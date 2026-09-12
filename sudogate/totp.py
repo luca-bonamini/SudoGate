@@ -1,8 +1,8 @@
-"""TOTP secondo RFC 6238, solo standard library.
+"""TOTP as specified by RFC 6238, standard library only.
 
-Usato dal wrapper root per verificare il secondo fattore sui comandi
-distruttivi. Il seed non lascia mai /etc/sudogate/seed: l'utente luca
-puo inoltrare un codice, non calcolarne uno valido.
+Used by the root wrapper to check the second factor on destructive commands.
+The seed never leaves /etc/sudogate/seed: the unprivileged user can relay a
+code, but cannot compute a valid one.
 """
 import base64
 import hashlib
@@ -52,8 +52,8 @@ def verify(
     key = _decode_secret(secret_b32)
     base = int(at_time) // period
     ok = False
-    # Confronto su tutta la finestra senza short-circuit: tempo costante
-    # rispetto a quale periodo combacia.
+    # Compare the whole window without short-circuiting: constant time with
+    # respect to which step matched.
     for step in range(-window, window + 1):
         candidate = _hotp(key, base + step, digits)
         if hmac.compare_digest(candidate, cleaned):

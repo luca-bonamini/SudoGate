@@ -173,8 +173,6 @@ Found a hole? Open an issue. Please do not include a working exploit in a public
 
 ## Known limitations
 
-- **Runtime messages are in Italian.** The code, tests and docs are English; the strings the bot
-  and CLI produce are not yet translated. Contributions welcome.
 - Pattern matching is heuristic. A determined obfuscation of a destructive command can evade the
   list and get through with a button tap alone.
 - Single user per installation: the sudoers rule names one account.

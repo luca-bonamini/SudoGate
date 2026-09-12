@@ -1,9 +1,9 @@
-"""Cache delle approvazioni sudo, per non richiedere il bottone a ogni
-ripetizione dello stesso comando nella stessa directory.
+"""Cache of approvals, so repeating the same command in the same directory
+does not ask for a button every time.
 
-Chiave: sha256(cwd + NUL + comando). Match esatto, mai su prefisso. I
-comandi distruttivi non vanno mai messi in cache: e responsabilita del
-chiamante non chiamare remember per quelli.
+Key: sha256(cwd + NUL + command). Exact match, never a prefix. Destructive
+commands must never be cached: it is the caller's job not to call remember
+for those.
 """
 import hashlib
 import json

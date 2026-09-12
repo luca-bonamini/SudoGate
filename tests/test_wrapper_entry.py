@@ -39,37 +39,37 @@ class TestWrapperEntry(unittest.TestCase):
         args = [str(WRAPPER), nonce] + ([code] if code else [])
         return subprocess.run(args, capture_output=True, text=True, env=env, timeout=10)
 
-    def test_non_distruttivo_esegue(self):
+    def test_non_destructive_runs(self):
         cmd = f"touch {self.marker}"
         nonce = state.create(self.home, cmd, "/tmp", "p", now=time.time())
         r = self.run_wrapper(nonce)
         self.assertEqual(r.returncode, 0)
         self.assertTrue(self.marker.exists())
 
-    def test_distruttivo_senza_codice_negato(self):
+    def test_destructive_without_code_denied(self):
         cmd = f"rm -rf {self.marker}"
         self.marker.write_text("x")
         nonce = state.create(self.home, cmd, "/tmp", "p", now=time.time())
         r = self.run_wrapper(nonce)
         self.assertEqual(r.returncode, 1)
-        self.assertTrue(self.marker.exists())  # non eseguito
+        self.assertTrue(self.marker.exists())  # not executed
 
-    def test_distruttivo_con_codice_valido_esegue(self):
+    def test_destructive_with_valid_code_runs(self):
         cmd = f"rm -rf {self.marker}"
         self.marker.mkdir()
         nonce = state.create(self.home, cmd, "/tmp", "p", now=time.time())
         code = totp.generate(SECRET, at_time=time.time())
         r = self.run_wrapper(nonce, code)
         self.assertEqual(r.returncode, 0)
-        self.assertFalse(self.marker.exists())  # rimosso
+        self.assertFalse(self.marker.exists())  # removed
 
-    def test_nonce_riusato_negato(self):
+    def test_reused_nonce_denied(self):
         cmd = f"touch {self.marker}"
         nonce = state.create(self.home, cmd, "/tmp", "p", now=time.time())
         self.assertEqual(self.run_wrapper(nonce).returncode, 0)
-        self.assertEqual(self.run_wrapper(nonce).returncode, 1)  # gia usato/rimosso
+        self.assertEqual(self.run_wrapper(nonce).returncode, 1)  # already used
 
-    def test_audit_registra(self):
+    def test_audit_records(self):
         cmd = f"touch {self.marker}"
         nonce = state.create(self.home, cmd, "/tmp", "p", now=time.time())
         self.run_wrapper(nonce)

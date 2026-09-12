@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Wrapper eseguito come root: /usr/local/sbin/sudogate-run <nonce> [<totp>]
+"""Wrapper executed as root: /usr/local/sbin/sudogate-run <nonce> [<totp>]
 
-Legge il comando dallo state per nonce, ri-classifica come distruttivo con
-i pattern root-only, e se distruttivo verifica il TOTP contro il seed
-root-only. Poi esegue. Scrive audit in /var/log/sudogate/audit.log.
+Reads the command from the state entry for the nonce, re-classifies it as
+destructive using the root-owned patterns, and when destructive verifies the
+TOTP against the root-owned seed. Then runs it. Appends to
+/var/log/sudogate/audit.log.
 """
 import os
 import pathlib
@@ -14,10 +15,10 @@ import time
 
 
 def _invoking_user_home():
-    """Home dell'utente che ha chiamato sudo, non di root.
+    """Home of the user who invoked the escalation, not root's.
 
-    sudo ripulisce l'ambiente ma lascia SUDO_USER. Serve per trovare lo
-    state e la libreria dell'utente, senza cablare alcun nome utente.
+    The environment is scrubbed but SUDO_USER survives. It is how the state
+    and the user library are located without hard-coding any user name.
     """
     user = os.environ.get("SUDO_USER")
     if user:
@@ -61,7 +62,7 @@ def _audit(line):
 
 def main(argv):
     if not argv:
-        print("uso: sudogate-run <nonce> [<totp>]", file=sys.stderr)
+        print("usage: sudogate-run <nonce> [<totp>]", file=sys.stderr)
         return 2
     nonce = argv[0]
     totp_code = argv[1] if len(argv) > 1 else None
@@ -69,8 +70,8 @@ def main(argv):
 
     record = state.claim(STATE_HOME, nonce, now, CLAIM_TTL)
     if record is None:
-        _audit(f"REJECT nonce={nonce} motivo=nonce-invalido-o-usato")
-        print("nonce non valido, scaduto o gia usato", file=sys.stderr)
+        _audit(f"REJECT nonce={nonce} reason=invalid-or-already-used")
+        print("nonce invalid, expired, or already used", file=sys.stderr)
         return 1
 
     command = record["command"]
@@ -78,7 +79,7 @@ def main(argv):
     seed = wrapper.load_seed(SEED_PATH)
     ok, reason = wrapper.authorize(command, patterns, seed, totp_code, now)
     if not ok:
-        _audit(f"DENY cmd={command!r} motivo={reason}")
+        _audit(f"DENY cmd={command!r} reason={reason}")
         print(reason, file=sys.stderr)
         return 1
 

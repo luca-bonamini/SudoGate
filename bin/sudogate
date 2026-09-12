@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Shim che Claude Code usa al posto di sudo.
+"""Shim that Claude Code uses instead of escalating privileges directly.
 
-Uso: sudogate <comando...>
-Chiede approvazione via bot del gate (bottone; TOTP se distruttivo),
-poi esegue tramite il wrapper root. Comandi non distruttivi gia
-approvati di recente saltano il bottone grazie alla cache.
+Usage: sudogate <command...>
+Asks the gate bot for approval (a button, plus a TOTP code when the command
+is destructive), then runs it through the root wrapper. Commands that are
+not destructive and were approved recently skip the button, thanks to the
+cache.
 """
 import os
 import pathlib
@@ -13,8 +14,8 @@ import sys
 import time
 
 def _add_package_to_path():
-    """Trova il package sudogate: prima accanto allo script (repo o plugin),
-    poi nella libreria installata dell'utente."""
+    """Locate the sudogate package: next to the script first (repo or plugin
+    checkout), then in the user's installed library."""
     here = pathlib.Path(__file__).resolve().parent
     for candidate in (here.parent, pathlib.Path.home() / ".local" / "lib" / "sudogate"):
         if (candidate / "sudogate" / "__init__.py").is_file():
@@ -33,12 +34,12 @@ WRAPPER = "/usr/local/sbin/sudogate-run"
 def main(argv):
     command = " ".join(argv).strip()
     if not command:
-        print("uso: sudogate <comando>", file=sys.stderr)
+        print("usage: sudogate <command>", file=sys.stderr)
         return 2
     try:
         cfg = config.load()
     except config.ConfigError as exc:
-        print(f"gate non configurato: {exc}", file=sys.stderr)
+        print(f"gate not configured: {exc}", file=sys.stderr)
         return 1
 
     home = config.home()
@@ -59,11 +60,11 @@ def main(argv):
     try:
         reply = ipc.request(home / "gate.sock", payload, timeout=timeout)
     except ipc.IPCError as exc:
-        print(f"gate irraggiungibile, comando negato: {exc}", file=sys.stderr)
+        print(f"gate unreachable, command denied: {exc}", file=sys.stderr)
         return 1
 
     if reply.get("verdict") != "approve":
-        print(f"negato: {reply.get('reason', 'nessun motivo')}", file=sys.stderr)
+        print(f"denied: {reply.get('reason', 'no reason given')}", file=sys.stderr)
         return 1
 
     if not destructive:

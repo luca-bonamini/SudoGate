@@ -34,7 +34,7 @@ class GateDaemonCase(unittest.TestCase):
 
 
 class TestNonDestructive(GateDaemonCase):
-    def test_approva_con_bottone(self):
+    def test_approve_with_button(self):
         p = self.payload()
         result = {}
         t = threading.Thread(target=lambda: result.update(self.d.on_shim_request(p)))
@@ -45,7 +45,7 @@ class TestNonDestructive(GateDaemonCase):
         self.assertEqual(result["verdict"], "approve")
         self.assertIsNone(result["totp"])
 
-    def test_nega_con_bottone(self):
+    def test_deny_with_button(self):
         p = self.payload()
         result = {}
         t = threading.Thread(target=lambda: result.update(self.d.on_shim_request(p)))
@@ -62,21 +62,21 @@ class TestNonDestructive(GateDaemonCase):
                 if nonce in self.d._pending:
                     return
             time.sleep(0.02)
-        self.fail("pending mai registrato")
+        self.fail("pending entry never registered")
 
 
 class TestDestructive(GateDaemonCase):
-    def test_approva_poi_chiede_e_riceve_totp(self):
+    def test_approve_then_asks_and_receives_totp(self):
         p = self.payload(destructive=True)
         result = {}
         t = threading.Thread(target=lambda: result.update(self.d.on_shim_request(p)))
         t.start()
         self._wait_pending("N1")
-        # primo tap: non risolve, chiede le cifre
+        # first tap does not resolve: it asks for the digits
         self.d.on_update({"callback_query": {"message": {"chat": {"id": 42}}, "data": "a:N1"}})
         with self.d._lock:
             self.assertTrue(self.d._pending["N1"].awaiting_totp)
-        # invio codice
+        # send the code
         self.d.on_update({"message": {"chat": {"id": 42}, "text": "123456"}})
         t.join(3)
         self.assertEqual(result["verdict"], "approve")
@@ -89,11 +89,11 @@ class TestDestructive(GateDaemonCase):
                 if nonce in self.d._pending:
                     return
             time.sleep(0.02)
-        self.fail("pending mai registrato")
+        self.fail("pending entry never registered")
 
 
 class TestSecurity(GateDaemonCase):
-    def test_scarta_callback_chat_estranea(self):
+    def test_discards_callback_from_other_chat(self):
         p = self.payload()
         result = {}
         t = threading.Thread(target=lambda: result.update(self.d.on_shim_request(p)))
@@ -103,18 +103,18 @@ class TestSecurity(GateDaemonCase):
         import time
         time.sleep(0.3)
         with self.d._lock:
-            self.assertIn("N1", self.d._pending)  # non risolto
-        # risolvo per far terminare il thread
+            self.assertIn("N1", self.d._pending)  # unresolved
+        # resolve so the thread can finish
         self.d.on_update({"callback_query": {"message": {"chat": {"id": 42}}, "data": "n:N1"}})
         t.join(3)
         self.assertEqual(result["verdict"], "deny")
 
-    def test_timeout_nega(self):
+    def test_timeout_denies(self):
         cfg = dict(CFG, approval_ttl_seconds=1)
         d = gatedaemon.GateDaemon(cfg, self.client, self.home)
-        result = d.on_shim_request(self.payload())  # nessuno risponde
+        result = d.on_shim_request(self.payload())  # nobody answers
         self.assertEqual(result["verdict"], "deny")
-        self.assertIn("timeout", result["reason"])
+        self.assertIn("timed out", result["reason"])
 
     def _wait_pending(self, nonce):
         import time
@@ -123,7 +123,7 @@ class TestSecurity(GateDaemonCase):
                 if nonce in self.d._pending:
                     return
             time.sleep(0.02)
-        self.fail("pending mai registrato")
+        self.fail("pending entry never registered")
 
 
 if __name__ == "__main__":

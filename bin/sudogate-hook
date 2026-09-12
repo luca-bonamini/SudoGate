@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
-"""Hook PreToolUse (matcher Bash): nega sudo diretto, impone sudogate.
+"""PreToolUse hook (Bash matcher): denies direct escalation, requires the shim.
 
-L'approvazione vera avviene nello shim. Questo hook serve solo a impedire
-che sudo venga invocato scavalcando lo shim. Esce 0 (nessuna decisione)
-quando il comando non contiene sudo.
+The real approval happens in the shim. This hook only prevents the shim from
+being bypassed. Exits 0 with no decision when the command is unrelated.
 """
 import json
 import pathlib
 import sys
 
 def _add_package_to_path():
-    """Trova il package sudogate: prima accanto allo script (repo o plugin),
-    poi nella libreria installata dell'utente."""
+    """Locate the sudogate package: next to the script first (repo or plugin
+    checkout), then in the user's installed library."""
     here = pathlib.Path(__file__).resolve().parent
     for candidate in (here.parent, pathlib.Path.home() / ".local" / "lib" / "sudogate"):
         if (candidate / "sudogate" / "__init__.py").is_file():
@@ -39,7 +38,7 @@ def main():
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "deny",
-            "permissionDecisionReason": "Usa: sudogate <comando> (senza sudo). Il gate chiede approvazione su Telegram.",
+            "permissionDecisionReason": "Use: sudogate <command>. The gate asks for approval on Telegram.",
         }
     }
     print(json.dumps(out))

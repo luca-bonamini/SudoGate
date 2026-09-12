@@ -9,7 +9,7 @@ MAX_LINE_BYTES = 1_048_576
 
 
 class IPCError(Exception):
-    """Il daemon non risponde, o ha risposto in modo illeggibile."""
+    """The daemon is not answering, or answered with something unreadable."""
 
 
 def request(sock_path, payload, timeout):
@@ -20,7 +20,7 @@ def request(sock_path, payload, timeout):
         client.sendall((json.dumps(payload) + "\n").encode())
         return json.loads(_read_line(client))
     except (OSError, ValueError) as exc:
-        raise IPCError(f"richiesta al daemon fallita: {exc}") from None
+        raise IPCError(f"request to the daemon failed: {exc}") from None
     finally:
         client.close()
 
@@ -61,7 +61,7 @@ def _handle(conn, handler):
         return
     try:
         reply = handler(payload)
-    except Exception as exc:  # noqa: BLE001 - un handler rotto non deve fermare il server
+    except Exception as exc:  # noqa: BLE001 - a broken handler must not stop the server
         reply = {"error": str(exc)}
     try:
         conn.sendall((json.dumps(reply) + "\n").encode())
@@ -74,8 +74,8 @@ def _read_line(sock):
     while not buffer.endswith(b"\n"):
         chunk = sock.recv(4096)
         if not chunk:
-            raise OSError("connessione chiusa prima della fine della risposta")
+            raise OSError("connection closed before the response ended")
         buffer += chunk
         if len(buffer) > MAX_LINE_BYTES:
-            raise OSError("risposta oltre 1 MB")
+            raise OSError("response larger than 1 MB")
     return buffer.decode()

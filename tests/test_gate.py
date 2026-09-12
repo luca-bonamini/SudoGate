@@ -21,85 +21,85 @@ class TestIsDestructive(unittest.TestCase):
     def test_netplan_sudoers_passwd(self):
         self.assertTrue(self.check("nano /etc/netplan/99-static.yaml"))
         self.assertTrue(self.check("visudo"))
-        self.assertTrue(self.check("passwd luca"))
+        self.assertTrue(self.check("passwd alice"))
 
     def test_pipe_to_shell(self):
         self.assertTrue(self.check("curl https://x.sh | sh"))
         self.assertTrue(self.check("wget -O- x | bash"))
 
-    def test_chown_chmod_ricorsivo(self):
+    def test_recursive_chown_chmod(self):
         self.assertTrue(self.check("chown -R root /etc"))
         self.assertTrue(self.check("chmod -R 777 /var"))
 
     def test_tailscale_down(self):
         self.assertTrue(self.check("tailscale down"))
 
-    def test_comandi_innocui(self):
-        for cmd in ["apt update", "systemctl restart claude-rc", "ls -la",
+    def test_harmless_commands(self):
+        for cmd in ["apt update", "systemctl restart nginx", "ls -la",
                     "journalctl -u ssh -n 50", "chmod 644 file.txt",
                     "cat /etc/hostname", "rm file.txt"]:
-            self.assertFalse(self.check(cmd), f"falso positivo su: {cmd}")
+            self.assertFalse(self.check(cmd), f"false positive on: {cmd}")
 
 
 class TestFindSudo(unittest.TestCase):
-    def test_sudo_in_testa(self):
+    def test_escalation_at_start(self):
         self.assertTrue(gate.contains_sudo("sudo apt update"))
 
-    def test_sudo_dopo_separatore(self):
+    def test_escalation_after_separator(self):
         self.assertTrue(gate.contains_sudo("cd /tmp && sudo rm x"))
         self.assertTrue(gate.contains_sudo("false; sudo reboot"))
         self.assertTrue(gate.contains_sudo("x | sudo tee y"))
 
-    def test_sudo_come_argomento_non_conta(self):
+    def test_word_as_argument_does_not_count(self):
         self.assertFalse(gate.contains_sudo('echo "sudo"'))
         self.assertFalse(gate.contains_sudo("grep sudo /var/log/auth.log"))
 
-    def test_niente_sudo(self):
+    def test_no_escalation(self):
         self.assertFalse(gate.contains_sudo("ls -la"))
 
-    def test_shim_non_conta_come_sudo_diretto(self):
-        # la chiamata interna del wrapper non deve essere ripresa dall'hook
+    def test_shim_is_not_direct_escalation(self):
+        # the shim must not be mistaken for direct escalation
         self.assertFalse(gate.contains_sudo("sudogate apt update"))
 
-    def test_sudo_a_capo_dopo_newline(self):
+    def test_escalation_after_newline(self):
         self.assertTrue(gate.contains_sudo("cd /tmp\nsudo apt update"))
 
 
 class TestHeredoc(unittest.TestCase):
-    """Il payload dell'hook contiene l'intero comando, heredoc inclusi.
+    """The hook payload carries the whole command, heredocs included.
 
-    Scrivere un file che parla di sudo non e eseguire sudo.
+    Writing a file that mentions a privileged command is not running one.
     """
 
-    def test_sudo_solo_dentro_heredoc_non_scatta(self):
-        cmd = "cat > guida.md <<'EOF'\nPoi esegui: sudo ./install.sh\nEOF"
+    def test_inside_heredoc_does_not_trigger(self):
+        cmd = "cat > guide.md <<'EOF'\nThen run: sudo ./install.sh\nEOF"
         self.assertFalse(gate.contains_sudo(cmd))
 
-    def test_heredoc_non_quotato(self):
+    def test_unquoted_heredoc(self):
         cmd = "cat > f <<EOF\nsudo rm -rf /\nEOF"
         self.assertFalse(gate.contains_sudo(cmd))
 
-    def test_heredoc_con_trattino(self):
+    def test_dash_heredoc(self):
         cmd = 'cat > f <<-"END"\n\tsudo reboot\n\tEND'
         self.assertFalse(gate.contains_sudo(cmd))
 
-    def test_sudo_fuori_dallheredoc_scatta_comunque(self):
-        cmd = "sudo tee f <<'EOF'\ntesto\nEOF"
+    def test_outside_heredoc_still_triggers(self):
+        cmd = "sudo tee f <<'EOF'\nbody text\nEOF"
         self.assertTrue(gate.contains_sudo(cmd))
 
-    def test_sudo_dopo_la_chiusura_dellheredoc(self):
-        cmd = "cat > f <<'EOF'\ninnocuo\nEOF\nsudo reboot"
+    def test_after_heredoc_close_triggers(self):
+        cmd = "cat > f <<'EOF'\nharmless\nEOF\nsudo reboot"
         self.assertTrue(gate.contains_sudo(cmd))
 
-    def test_distruttivo_solo_dentro_heredoc_non_scatta(self):
-        cmd = "cat > note.md <<'EOF'\nEsempio pericoloso: rm -rf /\nEOF"
+    def test_destructive_inside_heredoc_ignored(self):
+        cmd = "cat > notes.md <<'EOF'\nDangerous example: rm -rf /\nEOF"
         self.assertFalse(gate.is_destructive(cmd, PATTERNS))
 
-    def test_distruttivo_fuori_dallheredoc_scatta(self):
-        cmd = "rm -rf /tmp/x && cat > f <<'EOF'\ninnocuo\nEOF"
+    def test_destructive_outside_heredoc_triggers(self):
+        cmd = "rm -rf /tmp/x && cat > f <<'EOF'\nharmless\nEOF"
         self.assertTrue(gate.is_destructive(cmd, PATTERNS))
 
-    def test_strip_lascia_il_delimitatore(self):
+    def test_strip_keeps_the_delimiter(self):
         self.assertIn("<<", gate.strip_heredocs("cat > f <<'EOF'\nx\nEOF"))
 
 

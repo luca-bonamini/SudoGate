@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Cattura il chat_id: chiede il token, attende un messaggio al bot, scrive config.json."""
+"""Capture the chat id: ask for the token, wait for a message, write config.json."""
 import getpass
 import pathlib
 import sys
 import time
 
 def _add_package_to_path():
-    """Trova il package sudogate: prima accanto allo script (repo o plugin),
-    poi nella libreria installata dell'utente."""
+    """Locate the sudogate package: next to the script first (repo or plugin
+    checkout), then in the user's installed library."""
     here = pathlib.Path(__file__).resolve().parent
     for candidate in (here.parent, pathlib.Path.home() / ".local" / "lib" / "sudogate"):
         if (candidate / "sudogate" / "__init__.py").is_file():
@@ -23,26 +23,26 @@ ATTEMPTS = 20
 
 
 def main():
-    token = getpass.getpass("Token del bot (non viene mostrato): ").strip()
+    token = getpass.getpass("Bot token (input hidden): ").strip()
     if not token:
-        print("token vuoto, interrotto")
+        print("empty token, aborted")
         return 1
     client = telegram.Client(token)
-    print("Manda /start al bot da Telegram. Attendo.")
+    print("Send /start to the bot from Telegram. Waiting.")
     for _ in range(ATTEMPTS):
         try:
             updates = client.get_updates(offset=0, timeout=15)
         except telegram.TelegramError as exc:
-            print(f"errore: {exc}")
+            print(f"error: {exc}")
             return 1
         chat_id = bootstrap.first_chat_id(updates)
         if chat_id is not None:
             path = config.config_path()
             bootstrap.write_config(path, token, chat_id)
-            print(f"chat_id {chat_id} scritto in {path}")
+            print(f"chat_id {chat_id} written to {path}")
             return 0
         time.sleep(1)
-    print("nessun messaggio ricevuto, riprova")
+    print("no message received, try again")
     return 1
 
 

@@ -19,7 +19,7 @@ TMUX = {
 
 
 class TestTmuxSessions(unittest.TestCase):
-    def test_legge_nome_e_directory(self):
+    def test_reads_name_and_directory(self):
         runner = fake_runner(
             "rc-crm\t/home/dev/Projects/acme/CRM\n"
             "rc-personal\t/home/dev/Projects/personal\n"
@@ -32,40 +32,40 @@ class TestTmuxSessions(unittest.TestCase):
             },
         )
 
-    def test_tmux_assente_o_senza_server(self):
+    def test_tmux_missing_or_no_server(self):
         self.assertEqual(sessions.tmux_sessions(fake_runner("", returncode=1)), {})
 
-    def test_riga_malformata_ignorata(self):
+    def test_malformed_line_ignored(self):
         runner = fake_runner("senza-tab\nrc-crm\t/tmp/crm\n")
         self.assertEqual(sessions.tmux_sessions(runner), {"rc-crm": "/tmp/crm"})
 
 
 class TestLabelForCwd(unittest.TestCase):
-    def test_match_esatto(self):
+    def test_exact_match(self):
         self.assertEqual(
             sessions.label_for_cwd("/home/dev/Projects/acme", TMUX),
             "maybecompany",
         )
 
-    def test_sottodirectory(self):
+    def test_subdirectory(self):
         self.assertEqual(
             sessions.label_for_cwd("/home/dev/Projects/personal/claude-telegram", TMUX),
             "personal",
         )
 
-    def test_vince_il_prefisso_piu_lungo(self):
+    def test_longest_prefix_wins(self):
         self.assertEqual(
             sessions.label_for_cwd("/home/dev/Projects/acme/CRM/src", TMUX),
             "crm",
         )
 
-    def test_nessuna_sessione_usa_il_basename(self):
+    def test_no_session_falls_back_to_basename(self):
         self.assertEqual(sessions.label_for_cwd("/srv/qualcosa", TMUX), "qualcosa")
 
-    def test_senza_tmux_usa_il_basename(self):
+    def test_without_tmux_uses_basename(self):
         self.assertEqual(sessions.label_for_cwd("/home/dev/Projects/personal", {}), "personal")
 
-    def test_non_confonde_prefissi_parziali(self):
+    def test_partial_prefix_is_not_a_parent(self):
         tmux = {"rc-papayamarket": "/home/dev/Projects/acme/papaya"}
         self.assertEqual(
             sessions.label_for_cwd("/home/dev/Projects/acme/papayaShopper", tmux),

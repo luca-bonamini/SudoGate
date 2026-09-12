@@ -4,12 +4,12 @@
     "name": "Luca Bonamini",
     "url": "https://github.com/luca-bonamini"
   },
-  "description": "sudogate — gate di approvazione Telegram per i comandi sudo di Claude Code",
+  "description": "sudogate - Telegram approval gate for privileged commands in Claude Code",
   "plugins": [
     {
       "name": "sudogate",
       "source": "./",
-      "description": "Approva i comandi sudo di Claude Code da Telegram, con TOTP sui distruttivi verificato da root",
+      "description": "Approve Claude Code privileged commands from Telegram, with root-verified TOTP on destructive ones",
       "version": "0.1.0",
       "license": "MIT",
       "keywords": ["sudo", "telegram", "approval", "totp", "2fa", "security"]

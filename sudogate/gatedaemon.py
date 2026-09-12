@@ -1,11 +1,10 @@
-"""Daemon del gate: interazione di approvazione su Telegram.
+"""Gate daemon: the approval conversation on Telegram.
 
-Riceve dallo shim (via IPC) una richiesta per un nonce, manda un
-messaggio con bottoni Approva/Nega sul bot dedicato del gate, e per i
-comandi distruttivi raccoglie il codice TOTP di risposta. Restituisce
-allo shim il verdetto e, se raccolto, il codice. Non verifica mai il
-TOTP: quello lo fa il wrapper root contro il seed root-only. Qui il
-codice e solo trasportato.
+Receives a request for a nonce from the shim over IPC, sends an Approve/Deny
+message on the dedicated bot, and for destructive commands collects the TOTP
+reply. It returns the verdict and, when collected, the code. It never
+verifies the code: that happens root-side against the root-owned seed. Here
+the code is only carried.
 """
 import threading
 
@@ -37,7 +36,7 @@ class GateDaemon:
         try:
             self._client.send_message(self._chat_id, text, buttons)
         except Exception as exc:  # noqa: BLE001
-            return {"verdict": "deny", "totp": None, "reason": f"invio fallito: {exc}"}
+            return {"verdict": "deny", "totp": None, "reason": f"send failed: {exc}"}
         event = threading.Event()
         pending = _Pending(event, destructive)
         with self._lock:
@@ -46,7 +45,7 @@ class GateDaemon:
         with self._lock:
             self._pending.pop(nonce, None)
         if not got:
-            return {"verdict": "deny", "totp": None, "reason": "timeout, nessuna risposta"}
+            return {"verdict": "deny", "totp": None, "reason": "timed out with no answer"}
         return {"verdict": pending.verdict, "totp": pending.totp, "reason": pending.reason}
 
     def on_update(self, update):
@@ -70,7 +69,7 @@ class GateDaemon:
                 return
             if action == "n":
                 pending.verdict = "deny"
-                pending.reason = "negato dall'utente"
+                pending.reason = "denied by the user"
                 pending.event.set()
                 return
             if action != "a":
@@ -80,11 +79,11 @@ class GateDaemon:
                 prompt = True
             else:
                 pending.verdict = "approve"
-                pending.reason = "approvato"
+                pending.reason = "approved"
                 pending.event.set()
                 prompt = False
         if prompt:
-            self._safe_send("Approvato. Manda ora le 6 cifre del codice per confermare.")
+            self._safe_send("Approved. Now send the 6-digit code to confirm.")
 
     def _on_message(self, message):
         chat_id = (message.get("chat") or {}).get("id")
@@ -102,13 +101,13 @@ class GateDaemon:
                 return
             target.totp = digits
             target.verdict = "approve"
-            target.reason = "approvato con TOTP"
+            target.reason = "approved with TOTP"
             target.event.set()
 
     def _compose(self, payload):
-        head = f"[{payload.get('label', '?')}] richiesta sudo"
+        head = f"[{payload.get('label', '?')}] privileged command"
         if payload.get("destructive"):
-            head += " — distruttivo, servira il codice"
+            head += " — destructive, a code will be required"
         return f"{head}\n\n{payload.get('command', '')}"
 
     def _safe_send(self, text):

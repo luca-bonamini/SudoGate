@@ -15,22 +15,22 @@ def run(command):
 
 
 class TestGateHook(unittest.TestCase):
-    def test_nega_sudo_diretto(self):
+    def test_denies_direct_escalation(self):
         r = run("sudo apt update")
         self.assertEqual(r.returncode, 0)
         out = json.loads(r.stdout)
         self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
 
-    def test_claude_sudo_non_scatta(self):
+    def test_shim_does_not_trigger(self):
         r = run("sudogate apt update")
         self.assertEqual(r.returncode, 0)
         self.assertEqual(r.stdout.strip(), "")
 
-    def test_comando_senza_sudo(self):
+    def test_unrelated_command(self):
         r = run("ls -la")
         self.assertEqual(r.stdout.strip(), "")
 
-    def test_sudo_come_argomento(self):
+    def test_word_as_argument(self):
         r = run('echo "sudo"')
         self.assertEqual(r.stdout.strip(), "")
 

@@ -7,7 +7,7 @@ CALLBACK_DATA_MAX = 64
 
 
 class TelegramError(Exception):
-    """L'API Telegram ha rifiutato la chiamata o è irraggiungibile."""
+    """The Telegram API rejected the call, or could not be reached."""
 
 
 class Client:
@@ -42,11 +42,11 @@ class Client:
             ) as response:
                 body = json.loads(response.read().decode())
         except urllib.error.URLError as exc:
-            raise TelegramError(f"{method} non raggiungibile: {exc.reason}") from None
+            raise TelegramError(f"{method} unreachable: {exc.reason}") from None
         except (OSError, ValueError):
-            raise TelegramError(f"{method} ha dato una risposta illeggibile") from None
+            raise TelegramError(f"{method} returned an unreadable response") from None
         if not body.get("ok"):
-            raise TelegramError(f"{method}: {body.get('description', 'risposta non ok')}")
+            raise TelegramError(f"{method}: {body.get('description', 'response not ok')}")
         return body["result"]
 
 
@@ -58,7 +58,7 @@ def _keyboard(rows):
             encoded = data.encode()
             if len(encoded) > CALLBACK_DATA_MAX:
                 raise ValueError(
-                    f"callback_data di {len(encoded)} byte, il massimo è {CALLBACK_DATA_MAX}"
+                    f"callback_data is {len(encoded)} bytes, the maximum is {CALLBACK_DATA_MAX}"
                 )
             cells.append({"text": label, "callback_data": data})
         keyboard.append(cells)

@@ -1,6 +1,6 @@
-# Pattern comandi distruttivi — richiedono TOTP nel wrapper root.
-# Uno per riga, regex Python. Generato da sudogate/config.py DEFAULTS.
-# Root-only (0444): l'utente luca non puo indebolirlo.
+# Destructive command patterns - these require TOTP in the root wrapper.
+# One Python regex per line. Generated from sudogate/config.py DEFAULTS.
+# Root-owned (0444): the unprivileged user cannot weaken this list.
 
 \brm\s+(-\w+\s+)*-\w*(r\w*f|f\w*r)
 \bdd\b

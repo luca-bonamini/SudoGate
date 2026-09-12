@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Genera il seed TOTP del gate, mostra il QR e lascia un file temporaneo.
+"""Generate the TOTP seed, show the QR, and leave a temporary file.
 
-Gira come luca. NON scrive in /etc: stampa il segreto una volta, il QR
-(qrencode se presente, altrimenti l'URI otpauth), e scrive il segreto in
-/tmp/sudogate-seed (0600) che install-root.sh sposta come root a
-/etc/sudogate/seed 0400 root. Dopo l'installazione, cancella il temp.
+Runs as the normal user. It does not write to /etc: it prints the secret
+once, the QR (qrencode when available, otherwise the otpauth URI), and
+writes the secret to /tmp/sudogate-seed (0600), which install-root.sh moves
+to /etc/sudogate/seed 0400 root. Delete the temporary file afterwards.
 """
 import pathlib
 import shutil
@@ -13,8 +13,8 @@ import subprocess
 import sys
 
 def _add_package_to_path():
-    """Trova il package sudogate: prima accanto allo script (repo o plugin),
-    poi nella libreria installata dell'utente."""
+    """Locate the sudogate package: next to the script first (repo or plugin
+    checkout), then in the user's installed library."""
     here = pathlib.Path(__file__).resolve().parent
     for candidate in (here.parent, pathlib.Path.home() / ".local" / "lib" / "sudogate"):
         if (candidate / "sudogate" / "__init__.py").is_file():
@@ -32,19 +32,19 @@ TEMP = pathlib.Path("/tmp/sudogate-seed")
 def main():
     secret = totp.new_secret()
     uri = totp.provisioning_uri(secret, label=socket.gethostname(), issuer="sudogate")
-    print("Segreto TOTP (mostrato una volta sola):")
+    print("TOTP secret (shown once, and only once):")
     print(f"  {secret}\n")
     if shutil.which("qrencode"):
-        print("Scansiona questo QR con l'app authenticator:\n")
+        print("Scan this QR with your authenticator app:\n")
         subprocess.run(["qrencode", "-t", "ANSI", uri])
     else:
-        print("qrencode assente. Inserisci a mano questo URI nell'authenticator:")
+        print("qrencode not found. Enter this URI in your authenticator by hand:")
         print(f"  {uri}")
     TEMP.write_text(secret)
     TEMP.chmod(0o600)
-    print(f"\nSegreto scritto in {TEMP} (0600).")
+    print(f"\nSecret written to {TEMP} (0600).")
     print("Ora esegui:  sudo ./install-root.sh")
-    print("Poi cancella il temp:  shred -u /tmp/sudogate-seed")
+    print("Then delete the temporary file:  shred -u /tmp/sudogate-seed")
     return 0
 
 

@@ -30,7 +30,7 @@ DEFAULTS = {
 
 
 class ConfigError(Exception):
-    """Configurazione assente, illeggibile o con permessi sbagliati."""
+    """Config file missing, unreadable, or with permissions that are too open."""
 
 
 def home():
@@ -49,17 +49,17 @@ def load(path=None):
     try:
         mode = path.stat().st_mode & 0o777
     except OSError as exc:
-        raise ConfigError(f"configurazione non leggibile: {path}") from exc
+        raise ConfigError(f"config not readable: {path}") from exc
     if mode & 0o077:
-        raise ConfigError(f"permessi {mode:04o} troppo larghi su {path}, attesi 0600")
+        raise ConfigError(f"permissions {mode:04o} too open on {path}, expected 0600")
     try:
         raw = json.loads(path.read_text())
     except (OSError, ValueError) as exc:
-        raise ConfigError(f"configurazione illeggibile: {path}") from exc
+        raise ConfigError(f"config unreadable: {path}") from exc
     if not isinstance(raw, dict):
-        raise ConfigError(f"la configurazione in {path} non è un oggetto JSON")
+        raise ConfigError(f"config in {path} is not a JSON object")
     if not raw.get("bot_token"):
-        raise ConfigError(f"bot_token mancante in {path}")
+        raise ConfigError(f"bot_token missing in {path}")
     cfg = dict(DEFAULTS)
     cfg.update(raw)
     return cfg

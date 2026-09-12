@@ -1,1 +1,1 @@
-"""Layer Telegram per Claude Code su home-server."""
+"""sudogate — Telegram approval gate for privileged commands in Claude Code."""
