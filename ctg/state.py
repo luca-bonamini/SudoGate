@@ -11,18 +11,14 @@ import secrets
 
 _NONCE_RE = None
 
-
 def _valid_nonce(nonce):
     return bool(nonce) and all(c.isalnum() or c in "_-" for c in nonce)
-
 
 def _dir(home):
     return pathlib.Path(home) / "state"
 
-
 def _path(home, nonce):
     return _dir(home) / f"{nonce}.json"
-
 
 def create(home, command, cwd, label, now):
     nonce = secrets.token_urlsafe(16)
@@ -42,7 +38,6 @@ def create(home, command, cwd, label, now):
     os.replace(tmp, path)
     return nonce
 
-
 def peek(home, nonce):
     if not _valid_nonce(nonce):
         return None
@@ -50,7 +45,6 @@ def peek(home, nonce):
         return json.loads(_path(home, nonce).read_text())
     except (OSError, ValueError):
         return None
-
 
 def claim(home, nonce, now, ttl):
     record = peek(home, nonce)
@@ -65,7 +59,6 @@ def claim(home, nonce, now, ttl):
     tmp.chmod(0o600)
     os.replace(tmp, path)
     return record
-
 
 def purge(home, now, ttl):
     d = _dir(home)
