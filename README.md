@@ -77,7 +77,7 @@ sharing one with another tool will make both miss messages.
 
 ```
 git clone https://github.com/luca-bonamini/SudoGate
-cd sudogate
+cd SudoGate
 ./install.sh
 ~/bin/sudogate-bootstrap     # bot token (hidden) + chat id
 ~/bin/sudogate-seed          # scan the QR with your authenticator
