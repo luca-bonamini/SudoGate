@@ -1,0 +1,43 @@
+#!/usr/bin/env python3
+"""Genera il seed TOTP del gate, mostra il QR e lascia un file temporaneo.
+
+Gira come luca. NON scrive in /etc: stampa il segreto una volta, il QR
+(qrencode se presente, altrimenti l'URI otpauth), e scrive il segreto in
+/tmp/claude-gate-seed (0600) che install-gate-root.sh sposta come root a
+/etc/claude-gate/seed 0400 root. Dopo l'installazione, cancella il temp.
+"""
+import pathlib
+import shutil
+import subprocess
+import sys
+
+REPO_LIB = pathlib.Path("/home/luca/.local/lib/claude-telegram")
+if REPO_LIB.is_dir():
+    sys.path.append(str(REPO_LIB))
+
+from ctg import totp  # noqa: E402
+
+TEMP = pathlib.Path("/tmp/claude-gate-seed")
+
+
+def main():
+    secret = totp.new_secret()
+    uri = totp.provisioning_uri(secret, label="home-server", issuer="claude-gate")
+    print("Segreto TOTP (mostrato una volta sola):")
+    print(f"  {secret}\n")
+    if shutil.which("qrencode"):
+        print("Scansiona questo QR con l'app authenticator:\n")
+        subprocess.run(["qrencode", "-t", "ANSI", uri])
+    else:
+        print("qrencode assente. Inserisci a mano questo URI nell'authenticator:")
+        print(f"  {uri}")
+    TEMP.write_text(secret)
+    TEMP.chmod(0o600)
+    print(f"\nSegreto scritto in {TEMP} (0600).")
+    print("Ora esegui:  sudo ./install-gate-root.sh")
+    print("Poi cancella il temp:  shred -u /tmp/claude-gate-seed")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

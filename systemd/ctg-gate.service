@@ -1,0 +1,14 @@
+[Unit]
+Description=Gate sudo Telegram per Claude Code (bot dedicato, approvazione + TOTP)
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart=%h/bin/ctg-gate
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

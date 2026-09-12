@@ -1,0 +1,19 @@
+# Pattern comandi distruttivi — richiedono TOTP nel wrapper root.
+# Uno per riga, regex Python. Generato da ctg/config.py DEFAULTS.
+# Root-only (0444): l'utente luca non puo indebolirlo.
+
+\brm\s+(-\w+\s+)*-\w*(r\w*f|f\w*r)
+\bdd\b
+\bmkfs\b
+\b(fdisk|parted)\b
+\b(shutdown|reboot|poweroff|halt)\b
+\b(passwd|usermod|useradd|userdel)\b
+\b(visudo|sudoers)\b
+/etc/netplan
+\b(chown|chmod)\b.*\s-\w*R
+\b(iptables|ufw|nft)\b
+\bsystemctl\s+(disable|mask)\b
+\bapt(-get)?\s+(remove|purge|autoremove)\b
+\|\s*(ba)?sh\b
+>\s*/dev/(sd|nvme|vd)
+\btailscale\s+down\b

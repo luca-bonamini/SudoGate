@@ -1,39 +1,69 @@
 # claude-telegram
 
-Layer Telegram per Claude Code su `home-server`: notifiche in uscita, bot per richieste brevi e
-gate di approvazione per i comandi `sudo`.
+Gate sudo su Telegram per Claude Code su `home-server`, con conferma TOTP sui comandi distruttivi.
 
-Design completo in [`docs/2026-09-11-telegram-gate-design.md`](docs/2026-09-11-telegram-gate-design.md).
+Parte di un'architettura ibrida:
+- **ccgram** (`@jsayubi/ccgram`, esterno) → notifiche, bot interattivo, approvazioni non-sudo.
+- **questo repo** → tutto ciò che è sudo: bottone di approvazione per ogni `claude-sudo`, più
+  TOTP sui comandi distruttivi, con seed verificato root-side.
 
-Stato: piano 1 implementato e testato. Manca il bootstrap del bot, che richiede il telefono — vedi `docs/consegna-piano-1.md`.
+Design: [`docs/2026-09-11-telegram-gate-design.md`](docs/2026-09-11-telegram-gate-design.md).
+Configurazione (passi col telefono e root): [`docs/configurazione-finale.md`](docs/configurazione-finale.md).
 
-## Dove finiscono i file
+Stato: codice completo e testato (103 test). Manca la configurazione interattiva.
 
-Il repo non è la posizione di esecuzione. L'installazione copia i file qui:
+## Come funziona
 
-| dal repo | a |
+1. Claude non può usare `sudo` diretto: l'hook `PreToolUse` (matcher `Bash`) lo nega e impone
+   `claude-sudo <comando>`.
+2. Lo shim `claude-sudo` (utente) chiede approvazione al daemon del gate, che manda un bottone su
+   un bot Telegram dedicato. Sui comandi distruttivi il bot chiede poi le 6 cifre TOTP.
+3. Il wrapper `claude-sudo-run` (root, via `sudoers` NOPASSWD) legge il comando dallo state per
+   nonce, **ri-classifica** il comando con pattern root-only, e sui distruttivi verifica il TOTP
+   contro il seed root-only prima di eseguire. Così `luca` non aggira il secondo fattore.
+4. I comandi non distruttivi già approvati saltano il bottone per 8h (cache su `sha256(cwd+comando)`).
+
+## Moduli
+
+| modulo | ruolo |
 |---|---|
-| `ctg/` | `~/.local/lib/claude-telegram/ctg/` |
-| `bin/claude-telegram` | `~/bin/` |
-| `bin/claude-tg-hook` | `~/bin/` |
-| `bin/ctg-bootstrap` | `~/bin/` |
-| `systemd/claude-telegram.service` | `~/.config/systemd/user/` |
+| `ctg/config.py` | loader configurazione + pattern distruttivi |
+| `ctg/telegram.py` | client Bot API su urllib |
+| `ctg/ipc.py` | socket unix shim ↔ daemon |
+| `ctg/totp.py` | TOTP RFC 6238 |
+| `ctg/gate.py` | classificazione sudo / distruttivo |
+| `ctg/state.py` | store dei comandi in attesa, per nonce |
+| `ctg/cache.py` | cache approvazioni |
+| `ctg/wrapper.py` | autorizzazione root-side |
+| `ctg/gatedaemon.py` | interazione di approvazione (bottoni + TOTP) |
+| `ctg/sessions.py` | etichetta di progetto dal cwd |
+| `ctg/bootstrap.py` | cattura token + chat_id |
 
-Installazione: `./install.sh`, idempotente.
+| eseguibile | dove gira |
+|---|---|
+| `bin/claude-sudo` | utente, shim |
+| `bin/claude-sudo-run` | root, wrapper |
+| `bin/ctg-gate` | utente, daemon |
+| `bin/claude-tg-gate` | hook PreToolUse |
+| `bin/ctg-gate-seed` | utente, genera seed + QR |
+| `bin/ctg-bootstrap` | utente, token + chat_id |
 
-Configurazione e stato stanno in `~/.claude/telegram/`, il seed TOTP in `/etc/claude-gate/seed`.
-Nessuno dei due è nel repo.
+## Installazione
+
+Utente: `./install-gate.sh` → copia lib, shim, daemon, hook e unit.
+Root: `sudo ./install-gate-root.sh` → wrapper, `/etc/claude-gate`, sudoers validato.
+
+Dettaglio e ordine in `docs/configurazione-finale.md`.
 
 ## Segreti
 
-Il repo non contiene token, `chat_id` né seed. Il `.gitignore` blocca i nomi dei file di
-runtime, in caso una copia venga fatta qui per debug. Prima di ogni commit verificare che non
-siano stati aggiunti.
+Mai nel repo. Token e chat_id in `~/.claude/telegram/config.json` (0600). Seed TOTP in
+`/etc/claude-gate/seed` (0400 root), letto solo dal wrapper. `.gitignore` blocca i nomi dei file
+di runtime.
 
 ## Test
 
 ```
 python3 -m unittest discover -s tests
 ```
-
-Dipendenze: solo standard library di Python 3.14.
+Solo standard library di Python 3.14.
