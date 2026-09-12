@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+"""Wrapper eseguito come root: /usr/local/sbin/claude-sudo-run <nonce> [<totp>]
+
+Legge il comando dallo state per nonce, ri-classifica come distruttivo con
+i pattern root-only, e se distruttivo verifica il TOTP contro il seed
+root-only. Poi esegue. Scrive audit in /var/log/claude-gate/audit.log.
+"""
+import pathlib
+import subprocess
+import sys
+import time
+
+REPO_LIB = pathlib.Path("/home/luca/.local/lib/claude-telegram")
+if REPO_LIB.is_dir():
+    sys.path.append(str(REPO_LIB))
+
+from ctg import state, wrapper  # noqa: E402
+
+import os
+
+STATE_HOME = pathlib.Path(os.environ.get("CLAUDE_GATE_STATE_HOME", "/home/luca/.claude/telegram"))
+PATTERNS_PATH = os.environ.get("CLAUDE_GATE_PATTERNS", "/etc/claude-gate/destructive.patterns")
+SEED_PATH = os.environ.get("CLAUDE_GATE_SEED", "/etc/claude-gate/seed")
+AUDIT_PATH = pathlib.Path(os.environ.get("CLAUDE_GATE_AUDIT", "/var/log/claude-gate/audit.log"))
+CLAIM_TTL = 300
+
+
+def _audit(line):
+    try:
+        AUDIT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with AUDIT_PATH.open("a") as handle:
+            handle.write(f"{int(time.time())}\t{line}\n")
+        AUDIT_PATH.chmod(0o600)
+    except OSError:
+        pass
+
+
+def main(argv):
+    if not argv:
+        print("uso: claude-sudo-run <nonce> [<totp>]", file=sys.stderr)
+        return 2
+    nonce = argv[0]
+    totp_code = argv[1] if len(argv) > 1 else None
+    now = time.time()
+
+    record = state.claim(STATE_HOME, nonce, now, CLAIM_TTL)
+    if record is None:
+        _audit(f"REJECT nonce={nonce} motivo=nonce-invalido-o-usato")
+        print("nonce non valido, scaduto o gia usato", file=sys.stderr)
+        return 1
+
+    command = record["command"]
+    patterns = wrapper.load_patterns(PATTERNS_PATH)
+    seed = wrapper.load_seed(SEED_PATH)
+    ok, reason = wrapper.authorize(command, patterns, seed, totp_code, now)
+    if not ok:
+        _audit(f"DENY cmd={command!r} motivo={reason}")
+        print(reason, file=sys.stderr)
+        return 1
+
+    _audit(f"RUN cmd={command!r}")
+    result = subprocess.run(command, shell=True)
+    state_path = STATE_HOME / "state" / f"{nonce}.json"
+    try:
+        state_path.unlink(missing_ok=True)
+    except OSError:
+        pass
+    return result.returncode
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

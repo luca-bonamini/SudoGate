@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+"""Shim che Claude Code usa al posto di sudo.
+
+Uso: claude-sudo <comando...>
+Chiede approvazione via bot del gate (bottone; TOTP se distruttivo),
+poi esegue tramite il wrapper root. Comandi non distruttivi gia
+approvati di recente saltano il bottone grazie alla cache.
+"""
+import os
+import pathlib
+import subprocess
+import sys
+import time
+
+REPO_LIB = pathlib.Path("/home/luca/.local/lib/claude-telegram")
+if REPO_LIB.is_dir():
+    sys.path.append(str(REPO_LIB))
+
+from ctg import cache, config, gate, sessions, state  # noqa: E402
+from ctg import ipc  # noqa: E402
+
+WRAPPER = "/usr/local/sbin/claude-sudo-run"
+
+
+def main(argv):
+    command = " ".join(argv).strip()
+    if not command:
+        print("uso: claude-sudo <comando>", file=sys.stderr)
+        return 2
+    try:
+        cfg = config.load()
+    except config.ConfigError as exc:
+        print(f"gate non configurato: {exc}", file=sys.stderr)
+        return 1
+
+    home = config.home()
+    cwd = os.getcwd()
+    now = time.time()
+    destructive = gate.is_destructive(command, cfg["destructive_patterns"])
+    cache_path = home / "cache.json"
+    label = sessions.label_for_cwd(cwd, sessions.tmux_sessions())
+
+    nonce = state.create(home, command, cwd, label, now)
+
+    if not destructive and cache.is_approved(cache_path, cwd, command, now):
+        return _run_wrapper(nonce, None)
+
+    payload = {"nonce": nonce, "command": command, "cwd": cwd,
+               "label": label, "destructive": destructive}
+    timeout = cfg.get("approval_ttl_seconds", 120) + 15
+    try:
+        reply = ipc.request(home / "gate.sock", payload, timeout=timeout)
+    except ipc.IPCError as exc:
+        print(f"gate irraggiungibile, comando negato: {exc}", file=sys.stderr)
+        return 1
+
+    if reply.get("verdict") != "approve":
+        print(f"negato: {reply.get('reason', 'nessun motivo')}", file=sys.stderr)
+        return 1
+
+    if not destructive:
+        cache.remember(cache_path, cwd, command, now, cfg.get("cache_ttl_seconds", 28800))
+
+    return _run_wrapper(nonce, reply.get("totp"))
+
+
+def _run_wrapper(nonce, totp_code):
+    args = ["sudo", WRAPPER, nonce]
+    if totp_code:
+        args.append(totp_code)
+    return subprocess.run(args).returncode
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

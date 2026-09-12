@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+"""Daemon del gate sudo: poll del bot dedicato + IPC dallo shim."""
+import pathlib
+import signal
+import sys
+import threading
+
+REPO_LIB = pathlib.Path("/home/luca/.local/lib/claude-telegram")
+if REPO_LIB.is_dir():
+    sys.path.append(str(REPO_LIB))
+
+from ctg import config, gatedaemon, ipc, telegram  # noqa: E402
+
+POLL_TIMEOUT = 30
+RETRY_WAIT = 5
+
+
+def main():
+    cfg = config.load()
+    client = telegram.Client(cfg["bot_token"])
+    home = config.home()
+    daemon = gatedaemon.GateDaemon(cfg, client, home)
+    stop = threading.Event()
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(sig, lambda *_: stop.set())
+
+    server = threading.Thread(
+        target=ipc.serve,
+        args=(home / "gate.sock", daemon.on_shim_request, stop),
+        daemon=True,
+    )
+    server.start()
+
+    offset = 0
+    while not stop.is_set():
+        try:
+            updates = client.get_updates(offset, timeout=POLL_TIMEOUT)
+        except telegram.TelegramError:
+            stop.wait(RETRY_WAIT)
+            continue
+        for update in updates:
+            offset = update["update_id"] + 1
+            daemon.on_update(update)
+    server.join(5)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
