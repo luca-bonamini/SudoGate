@@ -9,7 +9,6 @@ import os
 import pathlib
 import secrets
 
-_NONCE_RE = None
 
 def _valid_nonce(nonce):
     return bool(nonce) and all(c.isalnum() or c in "_-" for c in nonce)
