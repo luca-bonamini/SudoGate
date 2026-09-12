@@ -34,10 +34,10 @@ class ConfigError(Exception):
 
 
 def home():
-    override = os.environ.get("CTG_HOME")
+    override = os.environ.get("SUDOGATE_HOME")
     if override:
         return pathlib.Path(override)
-    return pathlib.Path.home() / ".claude" / "telegram"
+    return pathlib.Path.home() / ".config" / "sudogate"
 
 
 def config_path():

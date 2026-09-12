@@ -2,7 +2,7 @@ import pathlib
 import tempfile
 import unittest
 
-from ctg import totp, wrapper
+from sudogate import totp, wrapper
 
 SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
 PATTERNS = [r"\brm\s+(-\w+\s+)*-\w*(r\w*f|f\w*r)", r"\bmkfs\b", r"/etc/netplan"]

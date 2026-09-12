@@ -3,7 +3,7 @@ import pathlib
 import tempfile
 import unittest
 
-from ctg import bootstrap, config
+from sudogate import bootstrap, config
 
 
 class TestFirstChatId(unittest.TestCase):

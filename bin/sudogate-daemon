@@ -5,11 +5,19 @@ import signal
 import sys
 import threading
 
-REPO_LIB = pathlib.Path("/home/luca/.local/lib/claude-telegram")
-if REPO_LIB.is_dir():
-    sys.path.append(str(REPO_LIB))
+def _add_package_to_path():
+    """Trova il package sudogate: prima accanto allo script (repo o plugin),
+    poi nella libreria installata dell'utente."""
+    here = pathlib.Path(__file__).resolve().parent
+    for candidate in (here.parent, pathlib.Path.home() / ".local" / "lib" / "sudogate"):
+        if (candidate / "sudogate" / "__init__.py").is_file():
+            sys.path.insert(0, str(candidate))
+            return
 
-from ctg import config, gatedaemon, ipc, telegram  # noqa: E402
+
+_add_package_to_path()
+
+from sudogate import config, gatedaemon, ipc, telegram  # noqa: E402
 
 POLL_TIMEOUT = 30
 RETRY_WAIT = 5

@@ -1,27 +1,51 @@
 #!/usr/bin/env python3
-"""Wrapper eseguito come root: /usr/local/sbin/claude-sudo-run <nonce> [<totp>]
+"""Wrapper eseguito come root: /usr/local/sbin/sudogate-run <nonce> [<totp>]
 
 Legge il comando dallo state per nonce, ri-classifica come distruttivo con
 i pattern root-only, e se distruttivo verifica il TOTP contro il seed
-root-only. Poi esegue. Scrive audit in /var/log/claude-gate/audit.log.
+root-only. Poi esegue. Scrive audit in /var/log/sudogate/audit.log.
 """
+import os
 import pathlib
+import pwd
 import subprocess
 import sys
 import time
 
-REPO_LIB = pathlib.Path("/home/luca/.local/lib/claude-telegram")
-if REPO_LIB.is_dir():
-    sys.path.append(str(REPO_LIB))
 
-from ctg import state, wrapper  # noqa: E402
+def _invoking_user_home():
+    """Home dell'utente che ha chiamato sudo, non di root.
 
-import os
+    sudo ripulisce l'ambiente ma lascia SUDO_USER. Serve per trovare lo
+    state e la libreria dell'utente, senza cablare alcun nome utente.
+    """
+    user = os.environ.get("SUDO_USER")
+    if user:
+        try:
+            return pathlib.Path(pwd.getpwnam(user).pw_dir)
+        except KeyError:
+            pass
+    return pathlib.Path.home()
 
-STATE_HOME = pathlib.Path(os.environ.get("CLAUDE_GATE_STATE_HOME", "/home/luca/.claude/telegram"))
-PATTERNS_PATH = os.environ.get("CLAUDE_GATE_PATTERNS", "/etc/claude-gate/destructive.patterns")
-SEED_PATH = os.environ.get("CLAUDE_GATE_SEED", "/etc/claude-gate/seed")
-AUDIT_PATH = pathlib.Path(os.environ.get("CLAUDE_GATE_AUDIT", "/var/log/claude-gate/audit.log"))
+
+USER_HOME = _invoking_user_home()
+
+for _candidate in (
+    pathlib.Path(__file__).resolve().parent.parent,
+    USER_HOME / ".local" / "lib" / "sudogate",
+):
+    if (_candidate / "sudogate" / "__init__.py").is_file():
+        sys.path.insert(0, str(_candidate))
+        break
+
+from sudogate import state, wrapper  # noqa: E402
+
+STATE_HOME = pathlib.Path(
+    os.environ.get("SUDOGATE_STATE_HOME") or (USER_HOME / ".config" / "sudogate")
+)
+PATTERNS_PATH = os.environ.get("SUDOGATE_PATTERNS", "/etc/sudogate/destructive.patterns")
+SEED_PATH = os.environ.get("SUDOGATE_SEED", "/etc/sudogate/seed")
+AUDIT_PATH = pathlib.Path(os.environ.get("SUDOGATE_AUDIT", "/var/log/sudogate/audit.log"))
 CLAIM_TTL = 300
 
 
@@ -37,7 +61,7 @@ def _audit(line):
 
 def main(argv):
     if not argv:
-        print("uso: claude-sudo-run <nonce> [<totp>]", file=sys.stderr)
+        print("uso: sudogate-run <nonce> [<totp>]", file=sys.stderr)
         return 2
     nonce = argv[0]
     totp_code = argv[1] if len(argv) > 1 else None

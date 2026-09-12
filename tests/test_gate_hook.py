@@ -5,7 +5,7 @@ import subprocess
 import unittest
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-HOOK = REPO / "bin" / "claude-tg-gate"
+HOOK = REPO / "bin" / "sudogate-hook"
 
 
 def run(command):
@@ -22,7 +22,7 @@ class TestGateHook(unittest.TestCase):
         self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
 
     def test_claude_sudo_non_scatta(self):
-        r = run("claude-sudo apt update")
+        r = run("sudogate apt update")
         self.assertEqual(r.returncode, 0)
         self.assertEqual(r.stdout.strip(), "")
 

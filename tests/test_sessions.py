@@ -1,7 +1,7 @@
 import subprocess
 import unittest
 
-from ctg import sessions
+from sudogate import sessions
 
 
 def fake_runner(stdout, returncode=0):
@@ -12,23 +12,23 @@ def fake_runner(stdout, returncode=0):
 
 
 TMUX = {
-    "rc-maybecompany": "/home/luca/Project/MayBeCompany",
-    "rc-crm": "/home/luca/Project/MayBeCompany/CRM",
-    "rc-personal": "/home/luca/Project/personal",
+    "rc-maybecompany": "/home/dev/Projects/acme",
+    "rc-crm": "/home/dev/Projects/acme/CRM",
+    "rc-personal": "/home/dev/Projects/personal",
 }
 
 
 class TestTmuxSessions(unittest.TestCase):
     def test_legge_nome_e_directory(self):
         runner = fake_runner(
-            "rc-crm\t/home/luca/Project/MayBeCompany/CRM\n"
-            "rc-personal\t/home/luca/Project/personal\n"
+            "rc-crm\t/home/dev/Projects/acme/CRM\n"
+            "rc-personal\t/home/dev/Projects/personal\n"
         )
         self.assertEqual(
             sessions.tmux_sessions(runner),
             {
-                "rc-crm": "/home/luca/Project/MayBeCompany/CRM",
-                "rc-personal": "/home/luca/Project/personal",
+                "rc-crm": "/home/dev/Projects/acme/CRM",
+                "rc-personal": "/home/dev/Projects/personal",
             },
         )
 
@@ -43,19 +43,19 @@ class TestTmuxSessions(unittest.TestCase):
 class TestLabelForCwd(unittest.TestCase):
     def test_match_esatto(self):
         self.assertEqual(
-            sessions.label_for_cwd("/home/luca/Project/MayBeCompany", TMUX),
+            sessions.label_for_cwd("/home/dev/Projects/acme", TMUX),
             "maybecompany",
         )
 
     def test_sottodirectory(self):
         self.assertEqual(
-            sessions.label_for_cwd("/home/luca/Project/personal/claude-telegram", TMUX),
+            sessions.label_for_cwd("/home/dev/Projects/personal/claude-telegram", TMUX),
             "personal",
         )
 
     def test_vince_il_prefisso_piu_lungo(self):
         self.assertEqual(
-            sessions.label_for_cwd("/home/luca/Project/MayBeCompany/CRM/src", TMUX),
+            sessions.label_for_cwd("/home/dev/Projects/acme/CRM/src", TMUX),
             "crm",
         )
 
@@ -63,12 +63,12 @@ class TestLabelForCwd(unittest.TestCase):
         self.assertEqual(sessions.label_for_cwd("/srv/qualcosa", TMUX), "qualcosa")
 
     def test_senza_tmux_usa_il_basename(self):
-        self.assertEqual(sessions.label_for_cwd("/home/luca/Project/personal", {}), "personal")
+        self.assertEqual(sessions.label_for_cwd("/home/dev/Projects/personal", {}), "personal")
 
     def test_non_confonde_prefissi_parziali(self):
-        tmux = {"rc-papayamarket": "/home/luca/Project/MayBeCompany/papaya"}
+        tmux = {"rc-papayamarket": "/home/dev/Projects/acme/papaya"}
         self.assertEqual(
-            sessions.label_for_cwd("/home/luca/Project/MayBeCompany/papayaShopper", tmux),
+            sessions.label_for_cwd("/home/dev/Projects/acme/papayaShopper", tmux),
             "papayaShopper",
         )
 

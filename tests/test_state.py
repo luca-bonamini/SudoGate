@@ -2,7 +2,7 @@ import pathlib
 import tempfile
 import unittest
 
-from ctg import state
+from sudogate import state
 
 
 class StateCase(unittest.TestCase):

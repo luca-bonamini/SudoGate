@@ -1,4 +1,4 @@
-"""Logica del wrapper root (/usr/local/sbin/claude-sudo-run).
+"""Logica del wrapper root (/usr/local/sbin/sudogate-run).
 
 Non si fida ne del flag destructive dello state file ne dei pattern lato
 luca: ri-classifica il comando con i pattern root-only e, se distruttivo,
@@ -7,7 +7,7 @@ codice che gira come luca non aggira il secondo fattore sui distruttivi.
 """
 import pathlib
 
-from ctg import config, gate, totp
+from sudogate import config, gate, totp
 
 
 def load_patterns(path):

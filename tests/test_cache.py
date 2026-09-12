@@ -2,7 +2,7 @@ import pathlib
 import tempfile
 import unittest
 
-from ctg import cache
+from sudogate import cache
 
 
 class CacheCase(unittest.TestCase):

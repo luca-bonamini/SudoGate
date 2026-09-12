@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Shim che Claude Code usa al posto di sudo.
 
-Uso: claude-sudo <comando...>
+Uso: sudogate <comando...>
 Chiede approvazione via bot del gate (bottone; TOTP se distruttivo),
 poi esegue tramite il wrapper root. Comandi non distruttivi gia
 approvati di recente saltano il bottone grazie alla cache.
@@ -12,20 +12,28 @@ import subprocess
 import sys
 import time
 
-REPO_LIB = pathlib.Path("/home/luca/.local/lib/claude-telegram")
-if REPO_LIB.is_dir():
-    sys.path.append(str(REPO_LIB))
+def _add_package_to_path():
+    """Trova il package sudogate: prima accanto allo script (repo o plugin),
+    poi nella libreria installata dell'utente."""
+    here = pathlib.Path(__file__).resolve().parent
+    for candidate in (here.parent, pathlib.Path.home() / ".local" / "lib" / "sudogate"):
+        if (candidate / "sudogate" / "__init__.py").is_file():
+            sys.path.insert(0, str(candidate))
+            return
 
-from ctg import cache, config, gate, sessions, state  # noqa: E402
-from ctg import ipc  # noqa: E402
 
-WRAPPER = "/usr/local/sbin/claude-sudo-run"
+_add_package_to_path()
+
+from sudogate import cache, config, gate, sessions, state  # noqa: E402
+from sudogate import ipc  # noqa: E402
+
+WRAPPER = "/usr/local/sbin/sudogate-run"
 
 
 def main(argv):
     command = " ".join(argv).strip()
     if not command:
-        print("uso: claude-sudo <comando>", file=sys.stderr)
+        print("uso: sudogate <comando>", file=sys.stderr)
         return 2
     try:
         cfg = config.load()

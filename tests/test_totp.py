@@ -1,6 +1,6 @@
 import unittest
 
-from ctg import totp
+from sudogate import totp
 
 # RFC 6238 Appendix B: seed ASCII "12345678901234567890" (20 byte, SHA1), period 30, 8 cifre.
 RFC_SECRET_B32 = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"

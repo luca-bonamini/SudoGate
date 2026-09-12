@@ -1,0 +1,14 @@
+{
+  "name": "sudogate",
+  "displayName": "sudogate",
+  "version": "0.1.0",
+  "description": "Approva i comandi sudo di Claude Code da Telegram, con un secondo fattore TOTP sui comandi distruttivi verificato da root. Claude non puo eseguire sudo direttamente: passa dallo shim, tu approvi dal telefono.",
+  "author": {
+    "name": "Luca Bonamini",
+    "url": "https://github.com/luca-bonamini"
+  },
+  "repository": "https://github.com/luca-bonamini/sudogate",
+  "homepage": "https://github.com/luca-bonamini/sudogate#readme",
+  "license": "MIT",
+  "keywords": ["sudo", "telegram", "approval", "totp", "2fa", "security", "hooks"]
+}

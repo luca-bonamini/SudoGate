@@ -1,33 +1,27 @@
 #!/usr/bin/env bash
-# install.sh — copia il codice nelle posizioni di esecuzione. Idempotente.
+# install-gate.sh — parte utente (luca). Copia lib, shim, daemon, hook e unit.
+# La parte root (wrapper, /etc/sudogate, sudoers) sta in install-gate-root.sh.
 set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-lib="$HOME/.local/lib/claude-telegram"
+lib="$HOME/.local/lib/sudogate"
 bindir="$HOME/bin"
 unitdir="$HOME/.config/systemd/user"
-ctg_home="${CTG_HOME:-$HOME/.claude/telegram}"
+sudogate_home="${SUDOGATE_HOME:-$HOME/.config/sudogate}"
 
-mkdir -p "$lib" "$bindir" "$unitdir" "$ctg_home"
-chmod 700 "$ctg_home"
+mkdir -p "$lib" "$bindir" "$unitdir" "$sudogate_home"
+chmod 700 "$sudogate_home"
 
-rm -rf "$lib/ctg"
-cp -r "$repo/ctg" "$lib/ctg"
-find "$lib/ctg" -name '__pycache__' -type d -prune -exec rm -rf {} +
+rm -rf "$lib/sudogate"
+cp -r "$repo/sudogate" "$lib/sudogate"
+find "$lib/sudogate" -name '__pycache__' -type d -prune -exec rm -rf {} +
 
-for exe in claude-telegram claude-tg-hook ctg-bootstrap; do
+for exe in sudogate sudogate-daemon sudogate-hook sudogate-seed sudogate-bootstrap; do
   install -m 0755 "$repo/bin/$exe" "$bindir/$exe"
 done
 
-install -m 0644 "$repo/systemd/claude-telegram.service" "$unitdir/claude-telegram.service"
+install -m 0644 "$repo/systemd/sudogate.service" "$unitdir/sudogate.service"
 systemctl --user daemon-reload
 
-echo "Installato."
-echo "  libreria: $lib/ctg"
-echo "  eseguibili: $bindir/{claude-telegram,claude-tg-hook,ctg-bootstrap}"
-echo "  unit: $unitdir/claude-telegram.service"
-echo
-echo "Passi successivi:"
-echo "  1. $bindir/ctg-bootstrap        # token e chat_id"
-echo "  2. systemctl --user enable --now claude-telegram"
-echo "  3. registrare gli hook in ~/.claude/settings.json"
+echo "Parte utente installata."
+echo "Manca la parte root:  sudo $repo/install-gate-root.sh"

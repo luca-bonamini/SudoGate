@@ -4,7 +4,7 @@ import pathlib
 import tempfile
 import unittest
 
-from ctg import config
+from sudogate import config
 
 
 def write_config(dirpath, data, mode=0o600):
@@ -67,13 +67,13 @@ class TestLoad(unittest.TestCase):
 
 class TestHome(unittest.TestCase):
     def test_ctg_home_ha_la_precedenza(self):
-        os.environ["CTG_HOME"] = "/tmp/ctg-test-home"
-        self.addCleanup(os.environ.pop, "CTG_HOME", None)
-        self.assertEqual(config.home(), pathlib.Path("/tmp/ctg-test-home"))
+        os.environ["SUDOGATE_HOME"] = "/tmp/sudogate-test-home"
+        self.addCleanup(os.environ.pop, "SUDOGATE_HOME", None)
+        self.assertEqual(config.home(), pathlib.Path("/tmp/sudogate-test-home"))
 
-    def test_default_sotto_claude(self):
-        os.environ.pop("CTG_HOME", None)
-        self.assertEqual(config.home(), pathlib.Path.home() / ".claude" / "telegram")
+    def test_default_xdg(self):
+        os.environ.pop("SUDOGATE_HOME", None)
+        self.assertEqual(config.home(), pathlib.Path.home() / ".config" / "sudogate")
 
 
 if __name__ == "__main__":

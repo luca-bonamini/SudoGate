@@ -4,7 +4,7 @@ import threading
 import time
 import unittest
 
-from ctg import ipc
+from sudogate import ipc
 
 
 class TestIPC(unittest.TestCase):

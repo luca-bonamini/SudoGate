@@ -1,7 +1,7 @@
 """TOTP secondo RFC 6238, solo standard library.
 
 Usato dal wrapper root per verificare il secondo fattore sui comandi
-distruttivi. Il seed non lascia mai /etc/claude-gate/seed: l'utente luca
+distruttivi. Il seed non lascia mai /etc/sudogate/seed: l'utente luca
 puo inoltrare un codice, non calcolarne uno valido.
 """
 import base64

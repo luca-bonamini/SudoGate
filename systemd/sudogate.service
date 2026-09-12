@@ -6,7 +6,7 @@ StartLimitBurst=5
 
 [Service]
 Type=simple
-ExecStart=%h/bin/ctg-gate
+ExecStart=%h/bin/sudogate-daemon
 Restart=on-failure
 RestartSec=5
 

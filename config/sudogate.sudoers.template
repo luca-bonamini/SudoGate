@@ -1,0 +1,9 @@
+# sudogate — permette a __USER__ di eseguire SOLO il wrapper, come root, senza password.
+#
+# Il wrapper non accetta un comando sulla riga di comando: legge il comando
+# registrato per nonce, lo ri-classifica con i pattern root-only in
+# /etc/sudogate/destructive.patterns e, se distruttivo, pretende un TOTP
+# valido verificato contro /etc/sudogate/seed (0400 root).
+#
+# Installare a 0440 root:root. sudo ignora in silenzio i file piu permissivi.
+__USER__ ALL=(root) NOPASSWD: /usr/local/sbin/sudogate-run

@@ -1,5 +1,5 @@
 # Segreti e stato di runtime: non devono mai entrare nel repo.
-# I path reali stanno fuori (~/.claude/telegram/, /etc/claude-gate/),
+# I path reali stanno fuori (~/.config/sudogate/, /etc/sudogate/),
 # queste righe servono contro copie locali fatte per debug.
 config.json
 *.seed

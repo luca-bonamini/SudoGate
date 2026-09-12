@@ -1,6 +1,6 @@
 import unittest
 
-from ctg import config, gate
+from sudogate import config, gate
 
 PATTERNS = config.DEFAULTS["destructive_patterns"]
 
@@ -59,7 +59,48 @@ class TestFindSudo(unittest.TestCase):
 
     def test_shim_non_conta_come_sudo_diretto(self):
         # la chiamata interna del wrapper non deve essere ripresa dall'hook
-        self.assertFalse(gate.contains_sudo("claude-sudo apt update"))
+        self.assertFalse(gate.contains_sudo("sudogate apt update"))
+
+    def test_sudo_a_capo_dopo_newline(self):
+        self.assertTrue(gate.contains_sudo("cd /tmp\nsudo apt update"))
+
+
+class TestHeredoc(unittest.TestCase):
+    """Il payload dell'hook contiene l'intero comando, heredoc inclusi.
+
+    Scrivere un file che parla di sudo non e eseguire sudo.
+    """
+
+    def test_sudo_solo_dentro_heredoc_non_scatta(self):
+        cmd = "cat > guida.md <<'EOF'\nPoi esegui: sudo ./install.sh\nEOF"
+        self.assertFalse(gate.contains_sudo(cmd))
+
+    def test_heredoc_non_quotato(self):
+        cmd = "cat > f <<EOF\nsudo rm -rf /\nEOF"
+        self.assertFalse(gate.contains_sudo(cmd))
+
+    def test_heredoc_con_trattino(self):
+        cmd = 'cat > f <<-"END"\n\tsudo reboot\n\tEND'
+        self.assertFalse(gate.contains_sudo(cmd))
+
+    def test_sudo_fuori_dallheredoc_scatta_comunque(self):
+        cmd = "sudo tee f <<'EOF'\ntesto\nEOF"
+        self.assertTrue(gate.contains_sudo(cmd))
+
+    def test_sudo_dopo_la_chiusura_dellheredoc(self):
+        cmd = "cat > f <<'EOF'\ninnocuo\nEOF\nsudo reboot"
+        self.assertTrue(gate.contains_sudo(cmd))
+
+    def test_distruttivo_solo_dentro_heredoc_non_scatta(self):
+        cmd = "cat > note.md <<'EOF'\nEsempio pericoloso: rm -rf /\nEOF"
+        self.assertFalse(gate.is_destructive(cmd, PATTERNS))
+
+    def test_distruttivo_fuori_dallheredoc_scatta(self):
+        cmd = "rm -rf /tmp/x && cat > f <<'EOF'\ninnocuo\nEOF"
+        self.assertTrue(gate.is_destructive(cmd, PATTERNS))
+
+    def test_strip_lascia_il_delimitatore(self):
+        self.assertIn("<<", gate.strip_heredocs("cat > f <<'EOF'\nx\nEOF"))
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@ import json
 import unittest
 import urllib.error
 
-from ctg import telegram
+from sudogate import telegram
 
 
 class FakeResponse(io.BytesIO):

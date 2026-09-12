@@ -1,5 +1,0 @@
-# Permette a luca di eseguire SOLO il wrapper del gate come root, senza password.
-# Il wrapper decide cosa eseguire leggendo lo state per nonce e, sui comandi
-# distruttivi, pretende un TOTP verificato contro /etc/claude-gate/seed.
-# Installare a 0440 con: install -m 0440 -o root -g root ... (sudo lo ignora se piu largo)
-luca ALL=(root) NOPASSWD: /usr/local/sbin/claude-sudo-run

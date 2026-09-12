@@ -1,5 +1,5 @@
 # Pattern comandi distruttivi — richiedono TOTP nel wrapper root.
-# Uno per riga, regex Python. Generato da ctg/config.py DEFAULTS.
+# Uno per riga, regex Python. Generato da sudogate/config.py DEFAULTS.
 # Root-only (0444): l'utente luca non puo indebolirlo.
 
 \brm\s+(-\w+\s+)*-\w*(r\w*f|f\w*r)

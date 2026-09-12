@@ -3,7 +3,7 @@ import tempfile
 import threading
 import unittest
 
-from ctg import gatedaemon
+from sudogate import gatedaemon
 
 
 class FakeClient:

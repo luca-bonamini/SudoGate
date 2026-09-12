@@ -6,10 +6,10 @@ import tempfile
 import time
 import unittest
 
-from ctg import state, totp
+from sudogate import state, totp
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-WRAPPER = REPO / "bin" / "claude-sudo-run"
+WRAPPER = REPO / "bin" / "sudogate-run"
 SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
 
 
@@ -31,10 +31,10 @@ class TestWrapperEntry(unittest.TestCase):
         env = dict(
             os.environ,
             PYTHONPATH=str(REPO),
-            CLAUDE_GATE_STATE_HOME=str(self.home),
-            CLAUDE_GATE_PATTERNS=str(self.patterns),
-            CLAUDE_GATE_SEED=str(self.seed),
-            CLAUDE_GATE_AUDIT=str(self.audit),
+            SUDOGATE_STATE_HOME=str(self.home),
+            SUDOGATE_PATTERNS=str(self.patterns),
+            SUDOGATE_SEED=str(self.seed),
+            SUDOGATE_AUDIT=str(self.audit),
         )
         args = [str(WRAPPER), nonce] + ([code] if code else [])
         return subprocess.run(args, capture_output=True, text=True, env=env, timeout=10)
