@@ -5,6 +5,16 @@ Reads the command from the state entry for the nonce, re-classifies it as
 destructive using the root-owned patterns, and when destructive verifies the
 TOTP against the root-owned seed. Then runs it. Appends to
 /var/log/sudogate/audit.log.
+
+Everything this program trusts must be root-owned. The library it imports and
+the policy files it reads are fixed paths under /usr/local/lib and /etc, both
+checked before use: a wrapper that loaded its own enforcement code from a
+directory the calling user can write would enforce nothing. The state record
+is the one input that still comes from the user's home, and it is treated as
+untrusted: the command it carries is re-classified here, never believed.
+
+Only when this runs unprivileged (tests, development) may the paths be
+redirected through the environment. As root they are constants.
 """
 import os
 import pathlib
@@ -13,12 +23,51 @@ import subprocess
 import sys
 import time
 
+IS_ROOT = os.geteuid() == 0
+
+LIB_DIR = pathlib.Path("/usr/local/lib/sudogate")
+ETC_DIR = pathlib.Path("/etc/sudogate")
+
+
+def _refuse(message):
+    print(f"sudogate-run: {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def _assert_root_only(path):
+    """Refuse unless path, and every directory above it, is root-owned and
+    writable by root alone.
+
+    Cheap, and it keeps the property true after future changes to the
+    installer: a library directory that became group-writable would otherwise
+    be a silent way back to arbitrary code as root.
+    """
+    path = pathlib.Path(path)
+    try:
+        targets = [path.stat()] + [parent.stat() for parent in path.parents]
+    except OSError as exc:
+        _refuse(f"cannot verify {path}: {exc}")
+    for component, info in zip([path] + list(path.parents), targets):
+        if info.st_uid != 0:
+            _refuse(f"{component} is not owned by root")
+        if info.st_mode & 0o022:
+            _refuse(f"{component} is writable by group or other")
+
+
+def _assert_library_root_only(lib_dir):
+    _assert_root_only(lib_dir)
+    for source in sorted(lib_dir.rglob("*.py")):
+        info = source.stat()
+        if info.st_uid != 0 or info.st_mode & 0o022:
+            _refuse(f"{source} is writable outside root")
+
 
 def _invoking_user_home():
     """Home of the user who invoked the escalation, not root's.
 
     The environment is scrubbed but SUDO_USER survives. It is how the state
-    and the user library are located without hard-coding any user name.
+    entry is located without hard-coding any user name. Nothing read from
+    there is trusted; it only says which command to consider.
     """
     user = os.environ.get("SUDO_USER")
     if user:
@@ -31,23 +80,34 @@ def _invoking_user_home():
 
 USER_HOME = _invoking_user_home()
 
-for _candidate in (
-    pathlib.Path(__file__).resolve().parent.parent,
-    USER_HOME / ".local" / "lib" / "sudogate",
-):
-    if (_candidate / "sudogate" / "__init__.py").is_file():
-        sys.path.insert(0, str(_candidate))
-        break
+if IS_ROOT:
+    if not (LIB_DIR / "sudogate" / "__init__.py").is_file():
+        _refuse(f"library not installed at {LIB_DIR}; re-run install-root.sh")
+    _assert_library_root_only(LIB_DIR)
+    sys.path.insert(0, str(LIB_DIR))
+else:
+    # Unprivileged: the checkout next to this script. Never a fixed path in
+    # anyone's home, and never reachable from the root branch above.
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from sudogate import state, wrapper  # noqa: E402
 
-STATE_HOME = pathlib.Path(
-    os.environ.get("SUDOGATE_STATE_HOME") or (USER_HOME / ".config" / "sudogate")
-)
-PATTERNS_PATH = os.environ.get("SUDOGATE_PATTERNS", "/etc/sudogate/destructive.patterns")
-SEED_PATH = os.environ.get("SUDOGATE_SEED", "/etc/sudogate/seed")
-ALWAYS_PATH = os.environ.get("SUDOGATE_TOTP_ALWAYS", "/etc/sudogate/totp_always")
-AUDIT_PATH = pathlib.Path(os.environ.get("SUDOGATE_AUDIT", "/var/log/sudogate/audit.log"))
+if IS_ROOT:
+    STATE_HOME = USER_HOME / ".config" / "sudogate"
+    PATTERNS_PATH = ETC_DIR / "destructive.patterns"
+    SEED_PATH = ETC_DIR / "seed"
+    ALWAYS_PATH = ETC_DIR / "totp_always"
+    AUDIT_PATH = pathlib.Path("/var/log/sudogate/audit.log")
+    _assert_root_only(ETC_DIR)
+else:
+    STATE_HOME = pathlib.Path(
+        os.environ.get("SUDOGATE_STATE_HOME") or (USER_HOME / ".config" / "sudogate")
+    )
+    PATTERNS_PATH = os.environ.get("SUDOGATE_PATTERNS", str(ETC_DIR / "destructive.patterns"))
+    SEED_PATH = os.environ.get("SUDOGATE_SEED", str(ETC_DIR / "seed"))
+    ALWAYS_PATH = os.environ.get("SUDOGATE_TOTP_ALWAYS", str(ETC_DIR / "totp_always"))
+    AUDIT_PATH = pathlib.Path(os.environ.get("SUDOGATE_AUDIT", "/var/log/sudogate/audit.log"))
+
 CLAIM_TTL = 300
 
 

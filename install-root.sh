@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # install-root.sh — root half. Run with root rights.
-# Installs the wrapper, /etc/sudogate (patterns 0444, seed 0400), the audit
-# log directory, and the sudoers rule, validated with visudo first.
+# Installs the wrapper and the library it imports, /etc/sudogate (patterns
+# 0444, seed 0400), the audit log directory, and the sudoers rule, validated
+# with visudo first.
+#
+# The library goes to /usr/local/lib/sudogate, root-owned and 0755: the
+# wrapper runs as root and must not import the copy in the user's home, which
+# the user — and anything running as the user — can rewrite.
 set -euo pipefail
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -20,8 +25,16 @@ fi
 echo "Installing sudogate for account: $target_user"
 seed_tmp="${SUDOGATE_SEED_TMP:-/tmp/sudogate-seed}"
 
-# 1. root wrapper
+# 1. root wrapper, and the library it imports
 install -m 0755 -o root -g root "$repo/bin/sudogate-run" /usr/local/sbin/sudogate-run
+
+install -d -m 0755 -o root -g root /usr/local/lib/sudogate
+rm -rf /usr/local/lib/sudogate/sudogate
+cp -r "$repo/sudogate" /usr/local/lib/sudogate/sudogate
+find /usr/local/lib/sudogate/sudogate -name '__pycache__' -type d -prune -exec rm -rf {} +
+chown -R root:root /usr/local/lib/sudogate
+find /usr/local/lib/sudogate -type d -exec chmod 0755 {} +
+find /usr/local/lib/sudogate -type f -exec chmod 0644 {} +
 
 # 2. /etc/sudogate
 install -d -m 0755 -o root -g root /etc/sudogate

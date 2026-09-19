@@ -155,6 +155,11 @@ enforces lives in `/etc/sudogate`, owned by root:
 | `seed` | `0400` | the TOTP secret; your user cannot read it |
 | `totp_always` | `0444` | if present, every command needs a code |
 
+The code that enforces all three is root-owned too, at `/usr/local/lib/sudogate`, installed by
+the root half. The wrapper refuses to start if that directory, anything above it, or any source
+file inside it is writable by someone other than root — otherwise the enforcement could be
+rewritten by the account it is meant to constrain.
+
 Change the policy by re-running the root installer with `SUDOGATE_TOTP_ALWAYS=1` (or `0`).
 
 ## Security
@@ -170,15 +175,37 @@ anything as root, provided you approve.
 | the agent acting unsupervised, or an automation mistake | yes — nothing runs without your approval |
 | you being away and missing a terminal prompt | yes — the request reaches your phone |
 | someone controlling your Telegram account | **no** by default for non-destructive commands; yes with `SUDOGATE_TOTP_ALWAYS=1` |
-| someone already running code as your user | **no** by default for non-destructive commands; yes with `SUDOGATE_TOTP_ALWAYS=1` — the seed is `0400 root` |
+| someone already running code as your user | **no** — see *What the gate does not authenticate* below |
 | an obfuscated destructive command that dodges the pattern list | **no** — matching is defence in depth, not proof |
 
 So in the default configuration, for non-destructive commands your user account is effectively
 equivalent to root, gated by one tap. That is the trade.
 
 **If you are reaching for your authenticator anyway, require the code for everything.** Install
-with `SUDOGATE_TOTP_ALWAYS=1` and the two *no* rows become *yes*: no path from your user, or from
-a stolen Telegram account, reaches root without the app in your hand. Same gesture, no weak half.
+with `SUDOGATE_TOTP_ALWAYS=1`. A stolen Telegram account then reaches nothing without the app in
+your hand, and the pattern list stops being the thing that decides. It does not close the gap
+below.
+
+### What the gate does not authenticate
+
+**Do not rely on SudoGate to contain something already running as your user.** The approval
+daemon runs as you, and so does the state directory it writes. Nothing in the record the wrapper
+reads is signed:
+
+- Code running as your user can write its own entry in `~/.config/sudogate/state/` and call the
+  wrapper directly. No message reaches your phone, because the daemon is never involved.
+- With `SUDOGATE_TOTP_ALWAYS=1` that forged entry still needs a code, and the seed is `0400 root`.
+  But the code travels from Telegram through the daemon — again, running as you — so the same
+  code can be taken and spent on a different command inside its window.
+- `destructive.patterns` is a list of spellings, not of effects. `python3 -c`, `perl -e`, or a
+  heredoc written now and run later match nothing.
+
+Closing this means moving the approval out of the account being gated, so that the command shown
+on the phone and the command run as root are the same object, held somewhere your user cannot
+write. That is a redesign, and it is not done. Until it is, read the tool as supervision of an
+agent that is behaving, not as containment of one that is not.
+
+Reported in [#1](https://github.com/luca-bonamini/SudoGate/issues/1).
 
 If your goal is to *increase* the security of a machine, this is the wrong tool. It buys
 supervision, not hardening.
@@ -207,7 +234,7 @@ Found a hole? Open an issue — without a working exploit in the public report, 
 python3 -m unittest discover -s tests
 ```
 
-125 tests, standard library only. TOTP is checked against the RFC 6238 vectors, and the
+135 tests, standard library only. TOTP is checked against the RFC 6238 vectors, and the
 enforcement path runs as a subprocess: a destructive command with a wrong code must be denied
 and must not run.
 
