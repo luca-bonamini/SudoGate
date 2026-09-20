@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
-"""Wrapper executed as root: /usr/local/sbin/sudogate-run <nonce> [<totp>]
+"""Wrapper executed as root: /usr/local/sbin/sudogate-run <token>
 
-Reads the command from the state entry for the nonce, re-classifies it as
-destructive using the root-owned patterns, and when destructive verifies the
-TOTP against the root-owned seed. Then runs it. Appends to
+Reads the approved command for the token, re-classifies it as destructive
+using the root-owned patterns, and when destructive verifies the TOTP that
+came with the approval against the root-owned seed. Then runs it. Appends to
 /var/log/sudogate/audit.log.
 
-Everything this program trusts must be root-owned. The library it imports and
-the policy files it reads are fixed paths under /usr/local/lib and /etc, both
-checked before use: a wrapper that loaded its own enforcement code from a
-directory the calling user can write would enforce nothing. The state record
-is the one input that still comes from the user's home, and it is treated as
-untrusted: the command it carries is re-classified here, never believed.
+Everything this program trusts is owned by root or by the daemon account. The
+library it imports and the policy files it reads are fixed paths under
+/usr/local/lib and /etc: a wrapper that loaded its own enforcement code from a
+directory the calling user can write would enforce nothing. The approved
+record comes from /run/sudogate/approved, written by the daemon at 0700 under
+the daemon's account, so the gated user can neither forge one nor read a
+token. The record also names the uid that asked, which must match the uid sudo
+escalated from.
 
 Only when this runs unprivileged (tests, development) may the paths be
 redirected through the environment. As root they are constants.
@@ -27,6 +29,8 @@ IS_ROOT = os.geteuid() == 0
 
 LIB_DIR = pathlib.Path("/usr/local/lib/sudogate")
 ETC_DIR = pathlib.Path("/etc/sudogate")
+RUNTIME_DIR = pathlib.Path("/run/sudogate")
+DAEMON_USER = "sudogate"
 
 
 def _refuse(message):
@@ -34,9 +38,9 @@ def _refuse(message):
     raise SystemExit(1)
 
 
-def _assert_root_only(path):
-    """Refuse unless path, and every directory above it, is root-owned and
-    writable by root alone.
+def _assert_trusted(path, allowed_uids=(0,)):
+    """Refuse unless path, and every directory above it, is owned by one of
+    allowed_uids and writable by its owner alone.
 
     Cheap, and it keeps the property true after future changes to the
     installer: a library directory that became group-writable would otherwise
@@ -48,10 +52,21 @@ def _assert_root_only(path):
     except OSError as exc:
         _refuse(f"cannot verify {path}: {exc}")
     for component, info in zip([path] + list(path.parents), targets):
-        if info.st_uid != 0:
-            _refuse(f"{component} is not owned by root")
+        if info.st_uid not in allowed_uids:
+            _refuse(f"{component} is owned by uid {info.st_uid}, which is not trusted")
         if info.st_mode & 0o022:
             _refuse(f"{component} is writable by group or other")
+
+
+def _assert_root_only(path):
+    _assert_trusted(path, allowed_uids=(0,))
+
+
+def _daemon_uid():
+    try:
+        return pwd.getpwnam(DAEMON_USER).pw_uid
+    except KeyError:
+        _refuse(f"the {DAEMON_USER} account does not exist; re-run install-root.sh")
 
 
 def _assert_library_root_only(lib_dir):
@@ -62,23 +77,15 @@ def _assert_library_root_only(lib_dir):
             _refuse(f"{source} is writable outside root")
 
 
-def _invoking_user_home():
-    """Home of the user who invoked the escalation, not root's.
+def _invoking_uid():
+    """uid sudo escalated from. The environment is scrubbed but SUDO_UID
+    survives, and the kernel — not the caller — set it."""
+    raw = os.environ.get("SUDO_UID")
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
 
-    The environment is scrubbed but SUDO_USER survives. It is how the state
-    entry is located without hard-coding any user name. Nothing read from
-    there is trusted; it only says which command to consider.
-    """
-    user = os.environ.get("SUDO_USER")
-    if user:
-        try:
-            return pathlib.Path(pwd.getpwnam(user).pw_dir)
-        except KeyError:
-            pass
-    return pathlib.Path.home()
-
-
-USER_HOME = _invoking_user_home()
 
 if IS_ROOT:
     if not (LIB_DIR / "sudogate" / "__init__.py").is_file():
@@ -93,15 +100,16 @@ else:
 from sudogate import state, wrapper  # noqa: E402
 
 if IS_ROOT:
-    STATE_HOME = USER_HOME / ".config" / "sudogate"
+    RUNTIME_HOME = RUNTIME_DIR
     PATTERNS_PATH = ETC_DIR / "destructive.patterns"
     SEED_PATH = ETC_DIR / "seed"
     ALWAYS_PATH = ETC_DIR / "totp_always"
     AUDIT_PATH = pathlib.Path("/var/log/sudogate/audit.log")
     _assert_root_only(ETC_DIR)
+    _assert_trusted(RUNTIME_HOME / state.SUBDIR, allowed_uids=(0, _daemon_uid()))
 else:
-    STATE_HOME = pathlib.Path(
-        os.environ.get("SUDOGATE_STATE_HOME") or (USER_HOME / ".config" / "sudogate")
+    RUNTIME_HOME = pathlib.Path(
+        os.environ.get("SUDOGATE_RUNTIME_DIR") or RUNTIME_DIR
     )
     PATTERNS_PATH = os.environ.get("SUDOGATE_PATTERNS", str(ETC_DIR / "destructive.patterns"))
     SEED_PATH = os.environ.get("SUDOGATE_SEED", str(ETC_DIR / "seed"))
@@ -123,35 +131,41 @@ def _audit(line):
 
 def main(argv):
     if not argv:
-        print("usage: sudogate-run <nonce> [<totp>]", file=sys.stderr)
+        print("usage: sudogate-run <token>", file=sys.stderr)
         return 2
-    nonce = argv[0]
-    totp_code = argv[1] if len(argv) > 1 else None
+    token = argv[0]
     now = time.time()
 
-    record = state.claim(STATE_HOME, nonce, now, CLAIM_TTL)
+    record = state.claim(RUNTIME_HOME, token, now, CLAIM_TTL)
     if record is None:
-        _audit(f"REJECT nonce={nonce} reason=invalid-or-already-used")
-        print("nonce invalid, expired, or already used", file=sys.stderr)
+        _audit("REJECT reason=invalid-or-already-used")
+        print("token invalid, expired, or already used", file=sys.stderr)
+        return 1
+
+    # The approval was granted to one account. Another account holding the
+    # token — it never reaches them through the gate — does not inherit it.
+    caller = _invoking_uid()
+    approved_for = record.get("uid")
+    if approved_for is not None and caller is not None and caller != approved_for:
+        _audit(f"DENY reason=uid-mismatch approved_for={approved_for} caller={caller}")
+        print("this approval was issued to another account", file=sys.stderr)
+        state.discard(RUNTIME_HOME, token)
         return 1
 
     command = record["command"]
     patterns = wrapper.load_patterns(PATTERNS_PATH)
     seed = wrapper.load_seed(SEED_PATH)
     always = wrapper.load_totp_always(ALWAYS_PATH)
-    ok, reason = wrapper.authorize(command, patterns, seed, totp_code, now, always)
+    ok, reason = wrapper.authorize(command, patterns, seed, record.get("totp"), now, always)
     if not ok:
         _audit(f"DENY cmd={command!r} reason={reason}")
         print(reason, file=sys.stderr)
+        state.discard(RUNTIME_HOME, token)
         return 1
 
     _audit(f"RUN cmd={command!r}")
     result = subprocess.run(command, shell=True)
-    state_path = STATE_HOME / "state" / f"{nonce}.json"
-    try:
-        state_path.unlink(missing_ok=True)
-    except OSError:
-        pass
+    state.discard(RUNTIME_HOME, token)
     return result.returncode
 
 

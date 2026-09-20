@@ -1,33 +1,64 @@
 #!/usr/bin/env python3
-"""Gate daemon: polls the dedicated bot and serves IPC requests from the shim."""
+"""Gate daemon: polls the dedicated bot and serves IPC requests from the shim.
+
+Started by systemd as the sudogate system account. It reads its configuration
+from /etc/sudogate, answers only the gated uid, and writes approved commands
+to its own runtime directory, which the gated user cannot read or write.
+"""
+import os
 import pathlib
 import signal
 import sys
 import threading
+import time
 
-def _add_package_to_path():
-    """Locate the sudogate package: next to the script first (repo or plugin
-    checkout), then in the user's installed library."""
-    here = pathlib.Path(__file__).resolve().parent
-    for candidate in (here.parent, pathlib.Path.home() / ".local" / "lib" / "sudogate"):
-        if (candidate / "sudogate" / "__init__.py").is_file():
-            sys.path.insert(0, str(candidate))
-            return
+LIB_DIR = pathlib.Path("/usr/local/lib/sudogate")
 
+if (LIB_DIR / "sudogate" / "__init__.py").is_file():
+    sys.path.insert(0, str(LIB_DIR))
+else:
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-_add_package_to_path()
-
-from sudogate import config, gatedaemon, ipc, telegram  # noqa: E402
+from sudogate import config, gatedaemon, ipc, state, telegram, wrapper  # noqa: E402
 
 POLL_TIMEOUT = 30
 RETRY_WAIT = 5
+PURGE_TTL = 300
+
+
+def _refuse(message):
+    print(f"sudogate-daemon: {message}", file=sys.stderr)
+    raise SystemExit(1)
 
 
 def main():
-    cfg = config.load()
+    if os.geteuid() == 0:
+        _refuse(f"do not run as root; systemd starts this as {config.DAEMON_USER}")
+
+    try:
+        cfg = config.load(config.system_config_path())
+        uid = config.gated_uid(cfg)
+    except config.ConfigError as exc:
+        _refuse(str(exc))
+
+    runtime = config.runtime_dir()
+    runtime.mkdir(parents=True, exist_ok=True)
+    approved = runtime / state.SUBDIR
+    approved.mkdir(parents=True, exist_ok=True)
+    approved.chmod(0o700)
+    state.purge(runtime, now=time.time(), ttl=PURGE_TTL)
+
+    patterns = wrapper.load_patterns(config.SYSTEM_HOME / "destructive.patterns")
+    totp_always = wrapper.load_totp_always(config.SYSTEM_HOME / "totp_always")
+    cache_path = pathlib.Path(
+        os.environ.get("SUDOGATE_CACHE") or (config.CACHE_DIR / "cache.json")
+    )
+
     client = telegram.Client(cfg["bot_token"])
-    home = config.home()
-    daemon = gatedaemon.GateDaemon(cfg, client, home)
+    daemon = gatedaemon.GateDaemon(
+        cfg, client, runtime,
+        patterns=patterns, totp_always=totp_always, cache_path=cache_path,
+    )
     stop = threading.Event()
 
     for sig in (signal.SIGTERM, signal.SIGINT):
@@ -35,7 +66,8 @@ def main():
 
     server = threading.Thread(
         target=ipc.serve,
-        args=(home / "gate.sock", daemon.on_shim_request, stop),
+        args=(config.socket_path(), daemon.on_shim_request, stop),
+        kwargs={"allowed_uids": {uid}, "mode": 0o666},
         daemon=True,
     )
     server.start()

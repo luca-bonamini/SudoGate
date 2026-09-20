@@ -1,14 +1,45 @@
 [Unit]
 Description=sudogate - Telegram approval gate for privileged commands
 After=network-online.target
+Wants=network-online.target
 StartLimitIntervalSec=300
 StartLimitBurst=5
 
 [Service]
 Type=simple
-ExecStart=%h/bin/sudogate-daemon
+# Not the gated account, and not root. The daemon decides, so it must live
+# where the account it constrains cannot reach it; it never needs privilege,
+# because the TOTP seed is verified root-side by the wrapper.
+User=sudogate
+Group=sudogate
+ExecStart=/usr/local/sbin/sudogate-daemon
+
+# /run/sudogate holds the socket (0666, peer-checked) and approved/ (0700).
+RuntimeDirectory=sudogate
+RuntimeDirectoryMode=0755
+# /var/lib/sudogate holds the approval cache, which used to sit in the gated
+# user's home where it could be pre-filled to skip the button.
+StateDirectory=sudogate
+StateDirectoryMode=0700
+
 Restart=on-failure
 RestartSec=5
 
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+# AF_NETLINK too: glibc's getaddrinfo uses it to decide which address
+# families are configured, and the daemon resolves api.telegram.org.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target

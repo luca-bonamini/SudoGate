@@ -19,6 +19,10 @@ Before anything else, the trade in plain words:
   user reaches root through that tap. The TOTP second factor only covers
   commands matching the destructive pattern list.
 
+  The approval itself runs under a separate system account, so code running
+  as you cannot forge one. It still cannot tell a harmful command from a
+  harmless one: only you can, when you read it on your phone.
+
 Install only if that trade is worth it to you.
 WARN
 read -r -p $'\nProceed? [type yes] ' answer
@@ -35,7 +39,7 @@ PY
 command -v systemctl >/dev/null || echo "  warning: systemctl not found, start the daemon by hand"
 command -v qrencode >/dev/null || echo "  warning: qrencode not found, the seed step prints a URI instead of a QR"
 
-say "2/4 - Copying library, executables and unit"
+say "2/4 - Copying library and executables"
 "$repo/install.sh"
 
 say "3/4 - Telegram bot"
@@ -66,9 +70,11 @@ Then, with root rights:
 
   $repo/install-root.sh
 
-Finally:
+That step installs the daemon as its own system account, moves the bot token
+to /etc/sudogate/config.json, and starts the service. Finally, remove the two
+copies it no longer needs in your home:
 
   shred -u /tmp/sudogate-seed
-  systemctl --user enable --now sudogate
+  shred -u "$HOME/.config/sudogate/config.json"
 
 ROOT

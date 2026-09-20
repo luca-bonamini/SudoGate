@@ -1,12 +1,24 @@
 """Gate daemon: the approval conversation on Telegram.
 
-Receives a request for a nonce from the shim over IPC, sends an Approve/Deny
-message on the dedicated bot, and for destructive commands collects the TOTP
-reply. It returns the verdict and, when collected, the code. It never
-verifies the code: that happens root-side against the root-owned seed. Here
-the code is only carried.
+It runs under its own system account, not the account being gated, and it is
+where every decision is made. The shim sends a command; the daemon classifies
+it against the root-owned pattern list, asks Telegram, collects the TOTP code
+when one is required, and — only on approval — writes the command to the
+approved-record directory and hands back the token that names it.
+
+The shim is not trusted with any of that. It cannot say a command is harmless,
+it cannot pre-fill the approval cache, and it never sees the TOTP code: the
+code goes from Telegram into the record that root reads. What the owner sees
+on the phone and what root runs are the same record.
+
+The daemon still does not verify the code. That happens root-side against the
+seed at 0400 root, which this account cannot read either.
 """
+import secrets
 import threading
+import time
+
+from sudogate import cache, gate, state
 
 
 class _Pending:
@@ -20,23 +32,49 @@ class _Pending:
 
 
 class GateDaemon:
-    def __init__(self, cfg, client, home):
+    def __init__(self, cfg, client, home, patterns=None, totp_always=False,
+                 cache_path=None):
         self._cfg = cfg
         self._client = client
         self._home = home
         self._chat_id = cfg["chat_id"]
+        # Root-owned policy, read once at start. The user config can add
+        # friction but never remove it, so a pattern list passed here wins.
+        self._patterns = list(patterns if patterns is not None
+                              else cfg.get("destructive_patterns", []))
+        self._totp_always = bool(totp_always) or bool(cfg.get("totp_always"))
+        self._cache_path = cache_path
         self._pending = {}
         self._lock = threading.Lock()
 
-    def on_shim_request(self, payload):
-        nonce = payload["nonce"]
-        destructive = bool(payload.get("destructive"))
-        text = self._compose(payload)
+    def classify(self, command):
+        """True when the command needs the TOTP second factor.
+
+        Decided here, against the root-owned list, because the shim runs as
+        the account the gate exists to constrain.
+        """
+        return self._totp_always or gate.is_destructive(command, self._patterns)
+
+    def on_shim_request(self, payload, peer):
+        command = payload.get("command") or ""
+        if not command:
+            return {"verdict": "deny", "token": None, "reason": "empty command"}
+        cwd = payload.get("cwd") or "/"
+        label = payload.get("label") or "?"
+        now = time.time()
+        destructive = self.classify(command)
+
+        if not destructive and self._cached(cwd, command, now):
+            return self._approve(command, cwd, label, peer, None, now,
+                                 "approved from cache")
+
+        nonce = secrets.token_urlsafe(8)
+        text = self._compose(command, label, destructive)
         buttons = [[("Approva", f"a:{nonce}"), ("Nega", f"n:{nonce}")]]
         try:
             self._client.send_message(self._chat_id, text, buttons)
         except Exception as exc:  # noqa: BLE001
-            return {"verdict": "deny", "totp": None, "reason": f"send failed: {exc}"}
+            return {"verdict": "deny", "token": None, "reason": f"send failed: {exc}"}
         event = threading.Event()
         pending = _Pending(event, destructive)
         with self._lock:
@@ -45,8 +83,30 @@ class GateDaemon:
         with self._lock:
             self._pending.pop(nonce, None)
         if not got:
-            return {"verdict": "deny", "totp": None, "reason": "timed out with no answer"}
-        return {"verdict": pending.verdict, "totp": pending.totp, "reason": pending.reason}
+            return {"verdict": "deny", "token": None, "reason": "timed out with no answer"}
+        if pending.verdict != "approve":
+            return {"verdict": "deny", "token": None, "reason": pending.reason}
+
+        if not destructive:
+            self._remember(cwd, command, time.time())
+        return self._approve(command, cwd, label, peer, pending.totp, time.time(),
+                             pending.reason)
+
+    def _approve(self, command, cwd, label, peer, totp, now, reason):
+        token = state.create(self._home, command, cwd, label, now,
+                             uid=getattr(peer, "uid", None), totp=totp)
+        return {"verdict": "approve", "token": token, "reason": reason}
+
+    def _cached(self, cwd, command, now):
+        if not self._cache_path:
+            return False
+        return cache.is_approved(self._cache_path, cwd, command, now)
+
+    def _remember(self, cwd, command, now):
+        if not self._cache_path:
+            return
+        cache.remember(self._cache_path, cwd, command, now,
+                       self._cfg.get("cache_ttl_seconds", 28800))
 
     def on_update(self, update):
         callback = update.get("callback_query")
@@ -104,11 +164,11 @@ class GateDaemon:
             target.reason = "approved with TOTP"
             target.event.set()
 
-    def _compose(self, payload):
-        head = f"[{payload.get('label', '?')}] privileged command"
-        if payload.get("destructive"):
+    def _compose(self, command, label, destructive):
+        head = f"[{label}] privileged command"
+        if destructive:
             head += " — destructive, a code will be required"
-        return f"{head}\n\n{payload.get('command', '')}"
+        return f"{head}\n\n{command}"
 
     def _safe_send(self, text):
         try:

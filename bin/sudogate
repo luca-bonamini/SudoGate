@@ -2,16 +2,17 @@
 """Shim that Claude Code uses instead of escalating privileges directly.
 
 Usage: sudogate <command...>
-Asks the gate bot for approval (a button, plus a TOTP code when the command
-is destructive), then runs it through the root wrapper. Commands that are
-not destructive and were approved recently skip the button, thanks to the
-cache.
+
+It carries the command to the gate daemon and, if the daemon returns a token,
+runs the wrapper with it. That is all it does. It does not decide whether a
+command is destructive, it does not keep the approval cache, and it never
+handles the TOTP code — it runs as the account the gate exists to constrain,
+so anything it decided would be a decision the caller could make for itself.
 """
 import os
 import pathlib
 import subprocess
 import sys
-import time
 
 def _add_package_to_path():
     """Locate the sudogate package: next to the script first (repo or plugin
@@ -25,11 +26,10 @@ def _add_package_to_path():
 
 _add_package_to_path()
 
-from sudogate import cache, config, gate, sessions, state, wrapper  # noqa: E402
-from sudogate import ipc  # noqa: E402
+from sudogate import config, gate, ipc, sessions  # noqa: E402
 
 WRAPPER = "/usr/local/sbin/sudogate-run"
-ALWAYS_PATH = os.environ.get("SUDOGATE_TOTP_ALWAYS", "/etc/sudogate/totp_always")
+REQUEST_TIMEOUT = 180
 
 
 def main(argv):
@@ -37,51 +37,22 @@ def main(argv):
     if not command:
         print("usage: sudogate <command>", file=sys.stderr)
         return 2
-    try:
-        cfg = config.load()
-    except config.ConfigError as exc:
-        print(f"gate not configured: {exc}", file=sys.stderr)
-        return 1
 
-    home = config.home()
     cwd = os.getcwd()
-    now = time.time()
-    # The root-owned policy wins over the user config: a flag the user could
-    # clear would not be a policy. The user file only adds, never removes.
-    always = wrapper.load_totp_always(ALWAYS_PATH) or bool(cfg.get("totp_always"))
-    destructive = always or gate.is_destructive(command, cfg["destructive_patterns"])
-    cache_path = home / "cache.json"
     label = sessions.label_for_cwd(cwd, sessions.tmux_sessions())
+    payload = {"command": command, "cwd": cwd, "label": label}
 
-    nonce = state.create(home, command, cwd, label, now)
-
-    if not destructive and cache.is_approved(cache_path, cwd, command, now):
-        return _run_wrapper(nonce, None)
-
-    payload = {"nonce": nonce, "command": command, "cwd": cwd,
-               "label": label, "destructive": destructive}
-    timeout = cfg.get("approval_ttl_seconds", 120) + 15
     try:
-        reply = ipc.request(home / "gate.sock", payload, timeout=timeout)
+        reply = ipc.request(config.socket_path(), payload, timeout=REQUEST_TIMEOUT)
     except ipc.IPCError as exc:
         print(f"gate unreachable, command denied: {exc}", file=sys.stderr)
         return 1
 
-    if reply.get("verdict") != "approve":
+    if reply.get("verdict") != "approve" or not reply.get("token"):
         print(f"denied: {reply.get('reason', 'no reason given')}", file=sys.stderr)
         return 1
 
-    if not destructive:
-        cache.remember(cache_path, cwd, command, now, cfg.get("cache_ttl_seconds", 28800))
-
-    return _run_wrapper(nonce, reply.get("totp"))
-
-
-def _run_wrapper(nonce, totp_code):
-    args = ["sudo", WRAPPER, nonce]
-    if totp_code:
-        args.append(totp_code)
-    return subprocess.run(args).returncode
+    return subprocess.run(["sudo", WRAPPER, reply["token"]]).returncode
 
 
 if __name__ == "__main__":

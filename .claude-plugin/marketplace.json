@@ -10,7 +10,7 @@
       "name": "sudogate",
       "source": "./",
       "description": "Approve Claude Code privileged commands from Telegram, with root-verified TOTP on destructive ones",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "license": "MIT",
       "keywords": ["sudo", "telegram", "approval", "totp", "2fa", "security"]
     }

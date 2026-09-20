@@ -50,7 +50,7 @@ class TestImportPath(unittest.TestCase):
         """
         root_branch = self.source.split("if IS_ROOT:")[2].split("else:")[0]
         self.assertNotIn("os.environ", root_branch)
-        for name in ("SUDOGATE_PATTERNS", "SUDOGATE_SEED", "SUDOGATE_STATE_HOME",
+        for name in ("SUDOGATE_PATTERNS", "SUDOGATE_SEED", "SUDOGATE_RUNTIME_DIR",
                      "SUDOGATE_AUDIT", "SUDOGATE_TOTP_ALWAYS"):
             self.assertNotIn(name, root_branch)
 
@@ -86,6 +86,16 @@ class TestRootOnlyAssertion(unittest.TestCase):
         lax.chmod(0o775)
         with self.assertRaises(SystemExit):
             self.module._assert_root_only(lax)
+
+    @unittest.skipUnless(os.geteuid() == 0, "only root can build the fixture")
+    def test_a_second_trusted_uid_is_accepted(self):
+        """The approved-record directory belongs to the daemon account, not to
+        root, and that is the only other owner the wrapper will accept."""
+        owned = self.dir / "owned"
+        owned.mkdir()
+        os.chown(owned, 0, 0)
+        owned.chmod(0o700)
+        self.module._assert_trusted(owned, allowed_uids=(0, 12345))
 
     @unittest.skipIf(os.geteuid() == 0, "needs a file not owned by root")
     def test_a_user_writable_source_file_is_refused(self):

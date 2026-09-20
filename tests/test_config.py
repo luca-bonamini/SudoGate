@@ -78,3 +78,41 @@ class TestHome(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSystemPaths(unittest.TestCase):
+    """Where the daemon's half lives. None of it is in the gated user's home."""
+
+    def setUp(self):
+        for name in ("SUDOGATE_SYSTEM_CONFIG", "SUDOGATE_RUNTIME_DIR"):
+            os.environ.pop(name, None)
+            self.addCleanup(os.environ.pop, name, None)
+
+    def test_the_daemon_config_is_not_in_a_home_directory(self):
+        self.assertEqual(config.system_config_path(), pathlib.Path("/etc/sudogate/config.json"))
+
+    def test_the_runtime_directory_is_not_in_a_home_directory(self):
+        self.assertEqual(config.runtime_dir(), pathlib.Path("/run/sudogate"))
+
+    def test_the_socket_lives_in_the_runtime_directory(self):
+        self.assertEqual(config.socket_path(), pathlib.Path("/run/sudogate/gate.sock"))
+
+    def test_paths_are_overridable_for_tests(self):
+        os.environ["SUDOGATE_RUNTIME_DIR"] = "/tmp/elsewhere"
+        self.assertEqual(config.socket_path(), pathlib.Path("/tmp/elsewhere/gate.sock"))
+
+
+class TestGatedUid(unittest.TestCase):
+    def test_an_explicit_uid_is_used(self):
+        self.assertEqual(config.gated_uid({"gated_uid": 1000}), 1000)
+
+    def test_a_user_name_is_resolved(self):
+        self.assertEqual(config.gated_uid({"gated_user": "root"}), 0)
+
+    def test_an_unknown_user_is_an_error(self):
+        with self.assertRaises(config.ConfigError):
+            config.gated_uid({"gated_user": "no-such-account-here"})
+
+    def test_neither_is_an_error(self):
+        with self.assertRaises(config.ConfigError):
+            config.gated_uid({})

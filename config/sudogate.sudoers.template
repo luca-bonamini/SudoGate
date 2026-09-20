@@ -1,9 +1,13 @@
 # sudogate — lets __USER__ run ONLY the wrapper as root, without a password.
 #
-# The wrapper takes no command on its command line: it reads the command
-# recorded for a nonce, re-classifies it with the root-owned patterns in
-# /etc/sudogate/destructive.patterns and, when destructive, requires a valid
-# TOTP checked against /etc/sudogate/seed (0400 root).
+# The wrapper takes no command on its command line: it takes a token naming a
+# record the gate daemon wrote after the owner approved the command on their
+# phone. That record lives in /run/sudogate/approved, mode 0700 under the
+# daemon's own account, so __USER__ can neither read a token nor write a
+# record. The wrapper re-classifies the command with the root-owned patterns
+# in /etc/sudogate/destructive.patterns and, when destructive, requires a
+# valid TOTP — carried in the record and checked against /etc/sudogate/seed
+# (0400 root), which neither __USER__ nor the daemon can read.
 #
 # Install at 0440 root:root. Files with wider permissions are ignored silently.
 __USER__ ALL=(root) NOPASSWD: /usr/local/sbin/sudogate-run

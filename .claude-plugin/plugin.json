@@ -1,7 +1,7 @@
 {
   "name": "sudogate",
   "displayName": "sudogate",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Approve Claude Code privileged commands from Telegram, with a root-verified TOTP second factor on destructive ones. Claude cannot escalate directly: it goes through the shim, you approve from your phone.",
   "author": {
     "name": "Luca Bonamini",
