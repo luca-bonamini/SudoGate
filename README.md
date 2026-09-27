@@ -190,6 +190,11 @@ supervision, not hardening.
 - Nonces are single-use, 120-second TTL, validated as filenames to rule out path traversal.
 - Updates from any chat other than the configured one are dropped.
 - The audit log is root-owned: your user cannot erase what ran.
+- Root imports its library from `/usr/local/lib/sudogate`, root-owned, with no fallback into
+  the invoking user's home, and reads the seed, the patterns and the policy from fixed paths
+  rather than from `SUDOGATE_*` in the environment. Both matter for the row above: a second
+  factor checked by code the user can replace, or against a seed the user can point elsewhere,
+  is not a second factor. Below root the environment overrides still apply, for the tests.
 - The hook strips heredoc bodies before matching, so writing a document that *mentions*
   privileged commands is not mistaken for running one.
 
@@ -207,7 +212,7 @@ Found a hole? Open an issue — without a working exploit in the public report, 
 python3 -m unittest discover -s tests
 ```
 
-125 tests, standard library only. TOTP is checked against the RFC 6238 vectors, and the
+131 tests, standard library only. TOTP is checked against the RFC 6238 vectors, and the
 enforcement path runs as a subprocess: a destructive command with a wrong code must be denied
 and must not run.
 

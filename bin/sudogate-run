@@ -5,6 +5,11 @@ Reads the command from the state entry for the nonce, re-classifies it as
 destructive using the root-owned patterns, and when destructive verifies the
 TOTP against the root-owned seed. Then runs it. Appends to
 /var/log/sudogate/audit.log.
+
+Everything root reads to make that decision - the library below, the seed,
+the patterns, the policy - lives where only root can write. The state entry
+is the exception, and deliberately so: the shim writes it as the user, and
+root re-classifies its contents rather than trusting them.
 """
 import os
 import pathlib
@@ -13,12 +18,14 @@ import subprocess
 import sys
 import time
 
+ROOT_LIB = "/usr/local/lib/sudogate"
+
 
 def _invoking_user_home():
     """Home of the user who invoked the escalation, not root's.
 
     The environment is scrubbed but SUDO_USER survives. It is how the state
-    and the user library are located without hard-coding any user name.
+    is located without hard-coding any user name.
     """
     user = os.environ.get("SUDO_USER")
     if user:
@@ -29,34 +36,28 @@ def _invoking_user_home():
     return pathlib.Path.home()
 
 
-USER_HOME = _invoking_user_home()
-
-for _candidate in (
-    pathlib.Path(__file__).resolve().parent.parent,
-    USER_HOME / ".local" / "lib" / "sudogate",
-):
-    if (_candidate / "sudogate" / "__init__.py").is_file():
-        sys.path.insert(0, str(_candidate))
-        break
+# As root, import only from the root-owned library. The previous fallback to
+# the invoking user's ~/.local/lib/sudogate let that user rewrite the code
+# that checks the TOTP, which is the whole gate. Below root - tests, a repo
+# checkout - the package next to this script is used instead.
+sys.path.insert(
+    0,
+    ROOT_LIB if os.geteuid() == 0 else str(pathlib.Path(__file__).resolve().parent.parent),
+)
 
 from sudogate import state, wrapper  # noqa: E402
 
-STATE_HOME = pathlib.Path(
-    os.environ.get("SUDOGATE_STATE_HOME") or (USER_HOME / ".config" / "sudogate")
-)
-PATTERNS_PATH = os.environ.get("SUDOGATE_PATTERNS", "/etc/sudogate/destructive.patterns")
-SEED_PATH = os.environ.get("SUDOGATE_SEED", "/etc/sudogate/seed")
-ALWAYS_PATH = os.environ.get("SUDOGATE_TOTP_ALWAYS", "/etc/sudogate/totp_always")
-AUDIT_PATH = pathlib.Path(os.environ.get("SUDOGATE_AUDIT", "/var/log/sudogate/audit.log"))
+USER_HOME = _invoking_user_home()
+PATHS = wrapper.resolve_paths(os.geteuid(), os.environ, USER_HOME)
 CLAIM_TTL = 300
 
 
 def _audit(line):
     try:
-        AUDIT_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with AUDIT_PATH.open("a") as handle:
+        PATHS["audit"].parent.mkdir(parents=True, exist_ok=True)
+        with PATHS["audit"].open("a") as handle:
             handle.write(f"{int(time.time())}\t{line}\n")
-        AUDIT_PATH.chmod(0o600)
+        PATHS["audit"].chmod(0o600)
     except OSError:
         pass
 
@@ -69,16 +70,16 @@ def main(argv):
     totp_code = argv[1] if len(argv) > 1 else None
     now = time.time()
 
-    record = state.claim(STATE_HOME, nonce, now, CLAIM_TTL)
+    record = state.claim(PATHS["state_home"], nonce, now, CLAIM_TTL)
     if record is None:
         _audit(f"REJECT nonce={nonce} reason=invalid-or-already-used")
         print("nonce invalid, expired, or already used", file=sys.stderr)
         return 1
 
     command = record["command"]
-    patterns = wrapper.load_patterns(PATTERNS_PATH)
-    seed = wrapper.load_seed(SEED_PATH)
-    always = wrapper.load_totp_always(ALWAYS_PATH)
+    patterns = wrapper.load_patterns(PATHS["patterns"])
+    seed = wrapper.load_seed(PATHS["seed"])
+    always = wrapper.load_totp_always(PATHS["totp_always"])
     ok, reason = wrapper.authorize(command, patterns, seed, totp_code, now, always)
     if not ok:
         _audit(f"DENY cmd={command!r} reason={reason}")
@@ -87,7 +88,7 @@ def main(argv):
 
     _audit(f"RUN cmd={command!r}")
     result = subprocess.run(command, shell=True)
-    state_path = STATE_HOME / "state" / f"{nonce}.json"
+    state_path = PATHS["state_home"] / "state" / f"{nonce}.json"
     try:
         state_path.unlink(missing_ok=True)
     except OSError:

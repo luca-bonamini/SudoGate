@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # install-root.sh — root half. Run with root rights.
-# Installs the wrapper, /etc/sudogate (patterns 0444, seed 0400), the audit
-# log directory, and the sudoers rule, validated with visudo first.
+# Installs the wrapper, the root-owned library it imports, /etc/sudogate
+# (patterns 0444, seed 0400), the audit log directory, and the sudoers rule,
+# validated with visudo first.
 set -euo pipefail
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -22,6 +23,16 @@ seed_tmp="${SUDOGATE_SEED_TMP:-/tmp/sudogate-seed}"
 
 # 1. root wrapper
 install -m 0755 -o root -g root "$repo/bin/sudogate-run" /usr/local/sbin/sudogate-run
+
+# 1b. the library the wrapper imports, root-owned.
+#     It used to be imported from the invoking user's ~/.local/lib/sudogate,
+#     which let that user replace the code checking the TOTP.
+lib=/usr/local/lib/sudogate
+rm -rf "$lib/sudogate"
+install -d -m 0755 -o root -g root "$lib" "$lib/sudogate"
+for f in "$repo"/sudogate/*.py; do
+  install -m 0444 -o root -g root "$f" "$lib/sudogate/$(basename "$f")"
+done
 
 # 2. /etc/sudogate
 install -d -m 0755 -o root -g root /etc/sudogate
